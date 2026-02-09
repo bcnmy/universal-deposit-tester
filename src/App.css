@@ -1,0 +1,694 @@
+/* ═══════════════════════════════════════════════
+   ALTO — Neobank / Fintech Interface
+   Clean · Trustworthy · Premium
+   Horizontal Pipeline Layout
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --step-width: 360px;
+}
+
+/* ── App Shell ────────────────────────────────── */
+.app {
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Top accent bar — thin teal gradient */
+.app::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #0F766E 0%, #14B8A6 50%, #0F766E 100%);
+  z-index: 100;
+}
+
+/* ── Content Wrapper ──────────────────────────── */
+.content {
+  position: relative;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.content-header {
+  padding-top: 3.5rem;
+}
+
+.content-bottom {
+  padding-bottom: 5rem;
+}
+
+/* ── Header ───────────────────────────────────── */
+.header {
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.header-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 0.3rem 0.75rem;
+  border-radius: 100px;
+  margin-bottom: 1rem;
+}
+
+.header-chip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.header h1 {
+  font-family: var(--font-sans);
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.header-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+/* ── Address Bar ──────────────────────────────── */
+.address-bar {
+  margin-top: 1.25rem;
+  padding: 0.7rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  animation: badge-in 0.35s var(--ease-spring) both;
+}
+
+.address-label {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+
+.address-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.address-text {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.28rem 0.6rem;
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-copy:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.btn-copy-success {
+  color: var(--success);
+  border-color: var(--success);
+  background: var(--success-light);
+}
+
+/* ── Pipeline Viewport ───────────────────────── */
+.pipeline-viewport {
+  position: relative;
+  margin: 0.5rem 0 2rem;
+}
+
+.pipeline-viewport::before,
+.pipeline-viewport::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.pipeline-viewport::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg), transparent);
+}
+
+.pipeline-viewport::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg), transparent);
+}
+
+/* ── Pipeline (horizontal scroll) ────────────── */
+.pipeline {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 1rem calc(50vw - var(--step-width) / 2);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pipeline::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Step ──────────────────────────────────────── */
+.step {
+  flex: 0 0 var(--step-width);
+  display: flex;
+  flex-direction: column;
+  scroll-snap-align: center;
+  transition: opacity 0.4s var(--ease), transform 0.4s var(--ease);
+}
+
+.step[data-status="pending"] {
+  opacity: 0.35;
+}
+
+.step[data-status="completed"] {
+  opacity: 0.6;
+}
+
+.step[data-status="pending"] .step-card {
+  pointer-events: none;
+}
+
+/* ── Step Marker (horizontal) ─────────────────── */
+.step-marker {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* Horizontal connector lines via pseudo-elements */
+.step-marker::before,
+.step-marker::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  transition: background 0.4s var(--ease);
+}
+
+/* Hide left connector for first step */
+.step:first-child .step-marker::before {
+  visibility: hidden;
+}
+
+/* Hide right connector for last step */
+.step:last-child .step-marker::after {
+  visibility: hidden;
+}
+
+/* Left connector is teal when the step is not pending (previous completed) */
+.step[data-status="completed"] .step-marker::before,
+.step[data-status="active"] .step-marker::before,
+.step[data-status="error"] .step-marker::before {
+  background: var(--primary);
+}
+
+/* Right connector is teal when this step is completed */
+.step[data-status="completed"] .step-marker::after {
+  background: var(--primary);
+}
+
+/* ── Step Number ─────────────────────────────── */
+.step-number {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  transition: all 0.35s var(--ease);
+  margin: 0 4px;
+}
+
+/* Active marker — teal outline + glow */
+.step[data-status="active"] .step-number {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: 0 0 0 4px var(--primary-50);
+}
+
+/* Completed marker — filled teal */
+.step[data-status="completed"] .step-number {
+  color: #FFFFFF;
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+/* Error marker — red outline */
+.step[data-status="error"] .step-number {
+  color: var(--error);
+  border-color: var(--error);
+  background: var(--error-light);
+}
+
+/* ── Step Card ────────────────────────────────── */
+.step-card {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.4rem;
+  margin: 0 12px;
+  box-shadow: var(--shadow-xs);
+  position: relative;
+  transition: all 0.3s var(--ease);
+}
+
+.step[data-status="active"] .step-card {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-sm), 0 0 0 3px var(--primary-50);
+}
+
+.step[data-status="active"] .step-card:hover {
+  box-shadow: var(--shadow-md), 0 0 0 3px var(--primary-50);
+}
+
+.step[data-status="completed"] .step-card {
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+
+.step[data-status="error"] .step-card {
+  border-color: var(--error);
+  box-shadow: var(--shadow-xs), 0 0 0 3px rgba(220, 38, 38, 0.06);
+}
+
+/* ── Step Content ─────────────────────────────── */
+.step-title {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.step[data-status="pending"] .step-title {
+  color: var(--text-muted);
+}
+
+.step-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin-bottom: 1rem;
+}
+
+.step[data-status="pending"] .step-desc {
+  color: var(--text-muted);
+}
+
+.step[data-status="completed"] .step-desc {
+  visibility: hidden;
+}
+
+/* ── Buttons ──────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.55rem 1.15rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: #FFFFFF;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.2s var(--ease);
+}
+
+.btn:hover {
+  background: var(--primary-hover);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.2);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn:disabled:hover {
+  background: var(--primary);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Loading state — subtle pulse */
+.btn-loading {
+  pointer-events: none;
+  animation: btn-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes btn-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Small button (logout) */
+.btn-sm {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-sm:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+  box-shadow: none;
+  transform: none;
+  border-color: var(--border);
+}
+
+/* ── Status Row ───────────────────────────────── */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.status-badge {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 100px;
+  animation: badge-in 0.35s var(--ease-spring) both;
+}
+
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.status-badge-success {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.status-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ── Receipt Card ─────────────────────────────── */
+.step-card-receipt {
+  overflow: hidden;
+}
+
+.step[data-status="completed"] .step-card-receipt {
+  background: var(--bg-card);
+  border-color: var(--border);
+  position: relative;
+}
+
+.step[data-status="completed"] .step-card-receipt::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--success), #34D399);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.receipt-content {
+  animation: badge-in 0.35s var(--ease-spring) both;
+}
+
+.receipt-header {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* ── Error Alert ──────────────────────────────── */
+.alert-error {
+  margin-top: 1rem;
+  background: var(--error-light);
+  border: 1px solid rgba(220, 38, 38, 0.15);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  animation: slide-in 0.3s var(--ease) both;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alert-label {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--error);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.alert-message {
+  font-size: 0.78rem;
+  color: var(--error);
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+/* ── Result Panel ─────────────────────────────── */
+.result-panel {
+  margin-top: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+  animation: result-in 0.4s var(--ease) both;
+}
+
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Green top bar */
+.result-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--success), #34D399);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.result-header {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.result-header-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--success-light);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.result-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.result-label {
+  font-family: var(--font-sans);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.result-value {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.result-divider {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  margin: 0.5rem 0 0.25rem;
+}
+
+.result-summary {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.result-summary strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── Responsive ───────────────────────────────── */
+@media (max-width: 600px) {
+  :root {
+    --step-width: 300px;
+  }
+
+  .content {
+    padding: 0 1rem;
+  }
+
+  .content-header {
+    padding-top: 2.5rem;
+  }
+
+  .header h1 {
+    font-size: 1.5rem;
+  }
+
+  .step-number {
+    width: 28px;
+    height: 28px;
+    font-size: 0.62rem;
+  }
+
+  .step-card {
+    padding: 1rem 1.1rem;
+    margin: 0 8px;
+  }
+
+  .pipeline-viewport::before,
+  .pipeline-viewport::after {
+    width: 40px;
+  }
+}
