@@ -17,6 +17,7 @@ import {
   createSessionSigner,
   createSmartSessionModule,
   createSessionMeeClient,
+  deployAccount,
   installSessionModule,
   grantDepositV3Permission,
   executeDepositV3,
@@ -47,6 +48,7 @@ function App() {
   // Status for each step
   const [authStatus, setAuthStatus] = useState<Status>("idle");
   const [setupStatus, setSetupStatus] = useState<Status>("idle");
+  const [deployStatus, setDeployStatus] = useState<Status>("idle");
   const [installStatus, setInstallStatus] = useState<Status>("idle");
   const [grantStatus, setGrantStatus] = useState<Status>("idle");
   const [execStatus, setExecStatus] = useState<Status>("idle");
@@ -57,6 +59,7 @@ function App() {
   const [copied, setCopied] = useState(false);
 
   // Refs to hold session objects across renders
+  const meeClientRef = useRef<any>(null);
   const sessionMeeClientRef = useRef<any>(null);
   const sessionModuleRef = useRef<any>(null);
 
@@ -72,7 +75,6 @@ function App() {
     try {
       await navigator.clipboard.writeText(embeddedWallet.address);
     } catch {
-      // Fallback
       const ta = document.createElement("textarea");
       ta.value = embeddedWallet.address;
       document.body.appendChild(ta);
@@ -84,7 +86,7 @@ function App() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // ─── Step 1: Sign EIP-7702 authorization ─────────────────────────
+  // ─── Step 2: Sign EIP-7702 authorization ─────────────────────────
   const handleSignAuthorization = async () => {
     if (!embeddedWallet) return;
     setAuthStatus("loading");
@@ -106,7 +108,7 @@ function App() {
     }
   };
 
-  // ─── Step 2: Initialize Nexus account ────────────────────────────
+  // ─── Step 3: Initialize Nexus account + MEE client ────────────────
   const handleSetupNexus = async () => {
     if (!embeddedWallet || !authorization) return;
     setSetupStatus("loading");
@@ -116,17 +118,12 @@ function App() {
       const provider = await embeddedWallet.getEthereumProvider();
       const address = embeddedWallet.address as `0x${string}`;
 
-      const mcAccount = await toMultichainNexusAccount({
-        signer: provider,
-        chainConfigurations: SUPPORTED_CHAINS.map((chain) => ({
-          chain,
-          transport: http(),
-          version: getMEEVersion(MEEVersion.V2_1_0),
-          accountAddress: address,
-        })),
-      });
+      const { mcAccount, meeClient, sessionMeeClient } =
+        await createSessionMeeClient(provider, address, authorization);
 
       setNexusAccount(mcAccount);
+      meeClientRef.current = meeClient;
+      sessionMeeClientRef.current = sessionMeeClient;
       setSetupStatus("success");
     } catch (err) {
       console.error("Failed to setup Nexus account:", err);
@@ -137,9 +134,31 @@ function App() {
     }
   };
 
-  // ─── Step 3: Install Smart Sessions module ───────────────────────
+  // ─── Step 4: Deploy account on all chains ─────────────────────────
+  const handleDeployAccount = async () => {
+    if (!meeClientRef.current || !embeddedWallet || !authorization) return;
+    setDeployStatus("loading");
+    setError(null);
+
+    try {
+      await deployAccount({
+        meeClient: meeClientRef.current,
+        walletAddress: embeddedWallet.address as `0x${string}`,
+        authorization,
+      });
+      setDeployStatus("success");
+    } catch (err) {
+      console.error("Failed to deploy account:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to deploy account"
+      );
+      setDeployStatus("error");
+    }
+  };
+
+  // ─── Step 5: Install Smart Sessions module ───────────────────────
   const handleInstallSessions = async () => {
-    if (!embeddedWallet || !authorization) return;
+    if (!sessionMeeClientRef.current || !authorization) return;
     setInstallStatus("loading");
     setError(null);
 
@@ -150,17 +169,8 @@ function App() {
       const ssModule = createSmartSessionModule(sessionSigner);
       sessionModuleRef.current = ssModule;
 
-      const provider = await embeddedWallet.getEthereumProvider();
-      const address = embeddedWallet.address as `0x${string}`;
-      const { sessionMeeClient } = await createSessionMeeClient(
-        provider,
-        address,
-        authorization
-      );
-      sessionMeeClientRef.current = sessionMeeClient;
-
       await installSessionModule({
-        sessionMeeClient,
+        sessionMeeClient: sessionMeeClientRef.current,
         smartSessionsValidator: ssModule,
         authorization,
       });
@@ -177,7 +187,7 @@ function App() {
     }
   };
 
-  // ─── Step 4: Grant depositV3 permission ──────────────────────────
+  // ─── Step 6: Grant depositV3 permission ──────────────────────────
   const handleGrantPermission = async () => {
     if (!sessionMeeClientRef.current || !sessionSignerAddress) return;
     setGrantStatus("loading");
@@ -201,7 +211,7 @@ function App() {
     }
   };
 
-  // ─── Step 5: Execute depositV3 via session (Arbitrum → Base) ─────
+  // ─── Step 7: Execute depositV3 via session (Arbitrum → Base) ─────
   const handleExecuteDeposit = async () => {
     if (!sessionMeeClientRef.current || !sessionDetails || !embeddedWallet)
       return;
@@ -231,15 +241,6 @@ function App() {
   };
 
   // ─── Auto-advance through steps ─────────────────────────────────
-  // After login → auto-trigger EIP-7702 authorization signing
-  useEffect(() => {
-    if (authenticated && embeddedWallet && authStatus === "idle") {
-      handleSignAuthorization();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, embeddedWallet, authStatus]);
-
-  // After authorization signed → auto-initialize Nexus account
   useEffect(() => {
     if (authStatus === "success" && setupStatus === "idle") {
       handleSetupNexus();
@@ -247,15 +248,20 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus, setupStatus]);
 
-  // After Nexus initialized → auto-install Smart Sessions module
   useEffect(() => {
-    if (setupStatus === "success" && authorization && installStatus === "idle") {
+    if (setupStatus === "success" && authorization && deployStatus === "idle") {
+      handleDeployAccount();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupStatus, authorization, deployStatus]);
+
+  useEffect(() => {
+    if (deployStatus === "success" && installStatus === "idle") {
       handleInstallSessions();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setupStatus, authorization, installStatus]);
+  }, [deployStatus, installStatus]);
 
-  // After module installed → auto-grant depositV3 permission
   useEffect(() => {
     if (installStatus === "success" && grantStatus === "idle") {
       handleGrantPermission();
@@ -263,7 +269,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [installStatus, grantStatus]);
 
-  // After permission granted → auto-execute depositV3
   useEffect(() => {
     if (grantStatus === "success" && sessionDetails && execStatus === "idle") {
       handleExecuteDeposit();
@@ -293,20 +298,25 @@ function App() {
   const s3 = deriveStatus(authStatus === "success", setupStatus);
   const s4 = deriveStatus(
     setupStatus === "success" && !!authorization,
-    installStatus
+    deployStatus
   );
-  const s5 = deriveStatus(installStatus === "success", grantStatus);
-  const s6 = deriveStatus(
+  const s5 = deriveStatus(deployStatus === "success", installStatus);
+  const s6 = deriveStatus(installStatus === "success", grantStatus);
+  const s7 = deriveStatus(
     grantStatus === "success" && !!sessionDetails,
     execStatus
   );
-  const s7: StepStatus = txHash ? "completed" : execStatus === "success" ? "active" : "pending";
+  const s8: StepStatus = txHash
+    ? "completed"
+    : execStatus === "success"
+      ? "active"
+      : "pending";
 
   const markerLabel = (status: StepStatus, num: string) =>
     status === "completed" ? "✓" : num;
 
   // ─── Auto-scroll active step to center ────────────────────────────
-  const stepStatuses = [s1, s2, s3, s4, s5, s6, s7];
+  const stepStatuses = [s1, s2, s3, s4, s5, s6, s7, s8];
   const activeIdx = stepStatuses.findIndex(
     (s) => s === "active" || s === "error"
   );
@@ -314,6 +324,9 @@ function App() {
     activeIdx !== -1
       ? activeIdx
       : Math.max(0, stepStatuses.lastIndexOf("completed"));
+
+  const completedCount = stepStatuses.filter((s) => s === "completed").length;
+  const progress = (completedCount / stepStatuses.length) * 100;
 
   useEffect(() => {
     const el = stepRefs.current[currentStepIndex];
@@ -330,351 +343,405 @@ function App() {
   // ────────────────────────────────────────────────────────────────────
   return (
     <div className="app">
-      {/* ── Header ──────────────────────────────────── */}
-      <div className="content content-header">
-        <header className="header">
-          <div className="header-chip">
-            <span className="header-chip-dot" />
-            Cross-Chain Bridge
-          </div>
-          <h1>Universal Deposit Address</h1>
-          <p className="header-subtitle">
-            Set up cross-chain USDC bridging via Across Protocol in 6 steps.
-          </p>
-          {authenticated && embeddedWallet && (
-            <div className="address-bar">
-              <span className="address-label">Your Address</span>
-              <div className="address-row">
-                <span className="address-text">
-                  {embeddedWallet.address}
-                </span>
-                <button
-                  className={`btn-copy${copied ? " btn-copy-success" : ""}`}
-                  onClick={handleCopyAddress}
-                >
-                  {copied ? "Copied!" : "Copy"}
-                </button>
-                <button className="btn btn-sm" onClick={logout}>
-                  Logout
-                </button>
-              </div>
-            </div>
-          )}
-        </header>
+      {/* Background dot grid */}
+      <div className="bg-dots" aria-hidden="true" />
+
+      {/* Progress bar */}
+      <div className="progress-track" aria-hidden="true">
+        <div
+          className="progress-fill"
+          style={{ width: `${progress}%` }}
+        />
       </div>
 
-      {/* ── Pipeline (horizontal scroll) ────────────── */}
-      <div className="pipeline-viewport">
-        <div className="pipeline">
-          {/* Step 1 — Connect Wallet */}
-          <div
-            className="step"
-            data-status={s1}
-            ref={(el) => {
-              stepRefs.current[0] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s1, "1")}</div>
-            </div>
-            <div className="step-card">
-              <div className="step-title">Connect Wallet</div>
-              <p className="step-desc">
-                Authenticate via Privy to provision an embedded wallet.
-              </p>
-              {!authenticated ? (
-                <button className="btn" onClick={login}>
-                  Connect with Privy
-                </button>
-              ) : (
-                <div className="status-row">
-                  <span className="status-badge status-badge-success">
-                    Connected
-                  </span>
-                  <span className="status-value">
-                    {embeddedWallet
-                      ? shortAddr(embeddedWallet.address)
-                      : "Waiting for wallet…"}
-                  </span>
-                </div>
-              )}
-            </div>
+      {/* ── Top Bar ─────────────────────────────── */}
+      <nav className="topbar">
+        <div className="topbar-brand">
+          <span className="brand-mark" aria-hidden="true">◆</span>
+          <span className="brand-name">NEXUS</span>
+        </div>
+        {authenticated && embeddedWallet ? (
+          <div className="topbar-actions">
+            <button
+              className={`chip-addr${copied ? " chip-addr--copied" : ""}`}
+              onClick={handleCopyAddress}
+            >
+              <span className="chip-dot" />
+              {copied ? "Copied" : shortAddr(embeddedWallet.address)}
+            </button>
+            <button className="btn-ghost" onClick={logout}>
+              Disconnect
+            </button>
           </div>
+        ) : null}
+      </nav>
 
-          {/* Step 2 — Sign EIP-7702 Authorization */}
-          <div
-            className="step"
-            data-status={s2}
-            ref={(el) => {
-              stepRefs.current[1] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s2, "2")}</div>
-            </div>
-            <div className="step-card">
-              <div className="step-title">Sign EIP-7702 Authorization</div>
-              <p className="step-desc">
-                Delegate Nexus smart account logic to your EOA. Using chainId=0
-                makes it valid across all chains.
-              </p>
-              {authStatus !== "success" ? (
-                <button
-                  className={`btn${authStatus === "loading" ? " btn-loading" : ""}`}
-                  onClick={handleSignAuthorization}
-                  disabled={authStatus === "loading" || s2 === "pending"}
-                >
-                  {authStatus === "loading"
-                    ? "Signing…"
-                    : "Sign Authorization"}
-                </button>
-              ) : (
-                <div className="status-row">
-                  <span className="status-badge status-badge-success">
-                    Authorized
-                  </span>
-                  <span className="status-value">
-                    EIP-7702 delegation signed
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+      {/* ── Hero ─────────────────────────────────── */}
+      <header className="hero">
+        <h1 className="hero-heading">
+          Universal Deposit Address
+        </h1>
+        <p className="hero-sub">
+          Cross-chain USDC bridging via Across Protocol
+          {" · "}
+          {completedCount < 8
+            ? `Step ${Math.min(currentStepIndex + 1, 8)} of 8`
+            : "Complete"}
+        </p>
+      </header>
 
-          {/* Step 3 — Initialize Nexus Account */}
-          <div
-            className="step"
-            data-status={s3}
-            ref={(el) => {
-              stepRefs.current[2] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s3, "3")}</div>
-            </div>
-            <div className="step-card">
-              <div className="step-title">Initialize Nexus Account</div>
-              <p className="step-desc">
-                Multichain Nexus across Optimism, Base, Polygon &amp; Arbitrum
-                with your EOA in EIP-7702 mode.
-              </p>
-              {setupStatus !== "success" ? (
-                <button
-                  className={`btn${setupStatus === "loading" ? " btn-loading" : ""}`}
-                  onClick={handleSetupNexus}
-                  disabled={setupStatus === "loading" || s3 === "pending"}
-                >
-                  {setupStatus === "loading"
-                    ? "Initializing…"
-                    : "Initialize Nexus"}
-                </button>
-              ) : (
-                <div className="status-row">
-                  <span className="status-badge status-badge-success">
-                    Nexus Ready
-                  </span>
-                  <span className="status-value">
-                    {shortAddr(embeddedWallet!.address)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+      {/* ── Pipeline ─────────────────────────────── */}
+      <section className="pipeline-section">
+        <div className="pipeline-viewport">
+          <div className="pipeline">
 
-          {/* Step 4 — Install Smart Sessions */}
-          <div
-            className="step"
-            data-status={s4}
-            ref={(el) => {
-              stepRefs.current[3] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s4, "4")}</div>
-            </div>
-            <div className="step-card">
-              <div className="step-title">Install Smart Sessions</div>
-              <p className="step-desc">
-                Generate a session signer and install the Smart Sessions module
-                on your Nexus account across all chains.
-              </p>
-              {installStatus !== "success" ? (
-                <button
-                  className={`btn${installStatus === "loading" ? " btn-loading" : ""}`}
-                  onClick={handleInstallSessions}
-                  disabled={installStatus === "loading" || s4 === "pending"}
-                >
-                  {installStatus === "loading"
-                    ? "Installing…"
-                    : "Install Sessions Module"}
-                </button>
-              ) : (
-                <div className="status-row">
-                  <span className="status-badge status-badge-success">
-                    Module Installed
-                  </span>
-                  {sessionSignerAddress && (
-                    <span className="status-value">
-                      Session: {shortAddr(sessionSignerAddress)}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Step 5 — Grant depositV3 Permission */}
-          <div
-            className="step"
-            data-status={s5}
-            ref={(el) => {
-              stepRefs.current[4] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s5, "5")}</div>
-            </div>
-            <div className="step-card">
-              <div className="step-title">
-                Grant Across depositV3 Permission
+            {/* Step 1 — Connect Wallet */}
+            <div
+              className="step"
+              data-status={s1}
+              ref={(el) => { stepRefs.current[0] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s1, "1")}</div>
               </div>
-              <p className="step-desc">
-                Sign a universal action policy granting the session signer
-                permission to call <code>depositV3</code> on the Across
-                SpokePool across all supported chains.
-              </p>
-              {grantStatus !== "success" ? (
-                <button
-                  className={`btn${grantStatus === "loading" ? " btn-loading" : ""}`}
-                  onClick={handleGrantPermission}
-                  disabled={grantStatus === "loading" || s5 === "pending"}
-                >
-                  {grantStatus === "loading"
-                    ? "Granting…"
-                    : "Grant depositV3 Permission"}
-                </button>
-              ) : (
-                <div className="status-row">
-                  <span className="status-badge status-badge-success">
-                    Permission Granted
-                  </span>
-                  <span className="status-value">
-                    depositV3 on Across SpokePool
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Step 6 — Execute depositV3 */}
-          <div
-            className="step"
-            data-status={s6}
-            ref={(el) => {
-              stepRefs.current[5] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s6, "6")}</div>
-            </div>
-            <div className="step-card">
-              <div className="step-title">Execute Across depositV3</div>
-              <p className="step-desc">
-                Bridge 1 USDC from Arbitrum → Base via the Across SpokePool
-                using the session signer. Gas is fully sponsored.
-              </p>
-              {execStatus !== "success" ? (
-                <button
-                  className={`btn${execStatus === "loading" ? " btn-loading" : ""}`}
-                  onClick={handleExecuteDeposit}
-                  disabled={execStatus === "loading" || s6 === "pending"}
-                >
-                  {execStatus === "loading"
-                    ? "Executing…"
-                    : "Execute depositV3 — 1 USDC"}
-                </button>
-              ) : (
-                <div className="status-row">
-                  <span className="status-badge status-badge-success">
-                    Executed
-                  </span>
-                  {txHash && (
-                    <span className="status-value">
-                      {txHash.slice(0, 10)}…{txHash.slice(-6)}
-                    </span>
+              <div className="step-card" data-step="01">
+                <h3 className="card-title">Connect Wallet</h3>
+                <p className="card-desc">
+                  Authenticate via Privy to provision an embedded wallet.
+                </p>
+                <div className="card-action">
+                  {!authenticated ? (
+                    <button className="btn-primary" onClick={login}>
+                      Connect with Privy
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Connected</span>
+                      <span className="done-value">
+                        {embeddedWallet
+                          ? shortAddr(embeddedWallet.address)
+                          : "Waiting…"}
+                      </span>
+                    </div>
                   )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
 
-          {/* Step 7 — Receipt */}
-          <div
-            className="step"
-            data-status={s7}
-            ref={(el) => {
-              stepRefs.current[6] = el;
-            }}
-          >
-            <div className="step-marker">
-              <div className="step-number">{markerLabel(s7, "7")}</div>
-            </div>
-            <div className="step-card step-card-receipt">
-              <div className="step-title">Receipt</div>
-              <p className="step-desc">
-                Transaction details for the cross-chain bridge transfer.
-              </p>
-              {txHash ? (
-                <div className="receipt-content">
-                  <div className="receipt-header">
-                    <span className="result-header-icon">✓</span>
-                    Transfer Submitted
-                  </div>
-                  <div className="result-fields">
-                    <div className="result-field">
-                      <span className="result-label">Wallet</span>
-                      <span className="result-value">
-                        {embeddedWallet?.address}
-                      </span>
+            {/* Step 2 — Sign EIP-7702 */}
+            <div
+              className="step"
+              data-status={s2}
+              ref={(el) => { stepRefs.current[1] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s2, "2")}</div>
+              </div>
+              <div className="step-card" data-step="02">
+                <h3 className="card-title">Sign EIP-7702</h3>
+                <p className="card-desc">
+                  Delegate Nexus smart account logic to your EOA with a
+                  universal authorization (chainId=0).
+                </p>
+                <div className="card-action">
+                  {authStatus !== "success" ? (
+                    <button
+                      className={`btn-primary${authStatus === "loading" ? " btn-loading" : ""}`}
+                      onClick={handleSignAuthorization}
+                      disabled={authStatus === "loading" || s2 === "pending"}
+                    >
+                      {authStatus === "loading"
+                        ? "Signing…"
+                        : "Sign Authorization"}
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Authorized</span>
+                      <span className="done-value">EIP-7702 signed</span>
                     </div>
-                    <div className="result-field">
-                      <span className="result-label">Session Signer</span>
-                      <span className="result-value">
-                        {sessionSignerAddress}
-                      </span>
-                    </div>
-                    <div className="result-field">
-                      <span className="result-label">Supertransaction</span>
-                      <span className="result-value">{txHash}</span>
-                    </div>
-                  </div>
-                  <hr className="result-divider" />
-                  <p className="result-summary">
-                    <strong>1 USDC</strong> bridged from Arbitrum → Base via
-                    Across depositV3, executed by the session signer with fully
-                    sponsored gas.
-                  </p>
+                  )}
                 </div>
-              ) : (
-                <span className="status-value">
-                  Waiting for execution…
-                </span>
-              )}
+              </div>
             </div>
+
+            {/* Step 3 — Initialize Nexus */}
+            <div
+              className="step"
+              data-status={s3}
+              ref={(el) => { stepRefs.current[2] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s3, "3")}</div>
+              </div>
+              <div className="step-card" data-step="03">
+                <h3 className="card-title">Initialize Nexus</h3>
+                <p className="card-desc">
+                  Create a multichain Nexus account across Optimism, Base,
+                  Polygon &amp; Arbitrum in EIP-7702 mode.
+                </p>
+                <div className="card-action">
+                  {setupStatus !== "success" ? (
+                    <button
+                      className={`btn-primary${setupStatus === "loading" ? " btn-loading" : ""}`}
+                      onClick={handleSetupNexus}
+                      disabled={setupStatus === "loading" || s3 === "pending"}
+                    >
+                      {setupStatus === "loading"
+                        ? "Initializing…"
+                        : "Initialize"}
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Ready</span>
+                      <span className="done-value">
+                        {shortAddr(embeddedWallet!.address)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 4 — Deploy Account */}
+            <div
+              className="step"
+              data-status={s4}
+              ref={(el) => { stepRefs.current[3] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s4, "4")}</div>
+              </div>
+              <div className="step-card" data-step="04">
+                <h3 className="card-title">Deploy Account</h3>
+                <p className="card-desc">
+                  Broadcast the EIP-7702 delegation on all supported chains
+                  via an empty supertransaction.
+                </p>
+                <div className="card-action">
+                  {deployStatus !== "success" ? (
+                    <button
+                      className={`btn-primary${deployStatus === "loading" ? " btn-loading" : ""}`}
+                      onClick={handleDeployAccount}
+                      disabled={deployStatus === "loading" || s4 === "pending"}
+                    >
+                      {deployStatus === "loading"
+                        ? "Deploying…"
+                        : "Deploy All Chains"}
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Deployed</span>
+                      <span className="done-value">
+                        {SUPPORTED_CHAINS.length} chains active
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 5 — Install Sessions */}
+            <div
+              className="step"
+              data-status={s5}
+              ref={(el) => { stepRefs.current[4] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s5, "5")}</div>
+              </div>
+              <div className="step-card" data-step="05">
+                <h3 className="card-title">Install Sessions</h3>
+                <p className="card-desc">
+                  Generate a session signer and install the Smart Sessions
+                  module on your Nexus account.
+                </p>
+                <div className="card-action">
+                  {installStatus !== "success" ? (
+                    <button
+                      className={`btn-primary${installStatus === "loading" ? " btn-loading" : ""}`}
+                      onClick={handleInstallSessions}
+                      disabled={installStatus === "loading" || s5 === "pending"}
+                    >
+                      {installStatus === "loading"
+                        ? "Installing…"
+                        : "Install Module"}
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Installed</span>
+                      {sessionSignerAddress && (
+                        <span className="done-value">
+                          {shortAddr(sessionSignerAddress)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 6 — Grant Permission */}
+            <div
+              className="step"
+              data-status={s6}
+              ref={(el) => { stepRefs.current[5] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s6, "6")}</div>
+              </div>
+              <div className="step-card" data-step="06">
+                <h3 className="card-title">Grant Permission</h3>
+                <p className="card-desc">
+                  Authorize the session signer to call{" "}
+                  <code>depositV3</code> on Across SpokePool across all
+                  supported chains.
+                </p>
+                <div className="card-action">
+                  {grantStatus !== "success" ? (
+                    <button
+                      className={`btn-primary${grantStatus === "loading" ? " btn-loading" : ""}`}
+                      onClick={handleGrantPermission}
+                      disabled={grantStatus === "loading" || s6 === "pending"}
+                    >
+                      {grantStatus === "loading"
+                        ? "Granting…"
+                        : "Grant Permission"}
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Granted</span>
+                      <span className="done-value">depositV3 on Across</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 7 — Execute Bridge */}
+            <div
+              className="step"
+              data-status={s7}
+              ref={(el) => { stepRefs.current[6] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s7, "7")}</div>
+              </div>
+              <div className="step-card" data-step="07">
+                <h3 className="card-title">Execute Bridge</h3>
+                <p className="card-desc">
+                  Bridge 1 USDC from Arbitrum → Base via Across depositV3
+                  with fully sponsored gas.
+                </p>
+                <div className="card-action">
+                  {execStatus !== "success" ? (
+                    <button
+                      className={`btn-primary${execStatus === "loading" ? " btn-loading" : ""}`}
+                      onClick={handleExecuteDeposit}
+                      disabled={execStatus === "loading" || s7 === "pending"}
+                    >
+                      {execStatus === "loading"
+                        ? "Executing…"
+                        : "Bridge 1 USDC"}
+                    </button>
+                  ) : (
+                    <div className="done-row">
+                      <span className="done-badge">Bridged</span>
+                      {txHash && (
+                        <span className="done-value">
+                          {shortAddr(txHash)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Step 8 — Receipt */}
+            <div
+              className="step"
+              data-status={s8}
+              ref={(el) => { stepRefs.current[7] = el; }}
+            >
+              <div className="step-marker">
+                <div className="step-num">{markerLabel(s8, "8")}</div>
+              </div>
+              <div className="step-card step-card--receipt" data-step="✦">
+                <h3 className="card-title">Receipt</h3>
+                {txHash ? (
+                  <div className="receipt">
+                    <div className="receipt-icon">
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M20 6L9 17l-5-5" />
+                      </svg>
+                    </div>
+                    <p className="receipt-headline">Transfer Confirmed</p>
+                    <div className="receipt-grid">
+                      <div className="receipt-row">
+                        <span className="receipt-label">Route</span>
+                        <span className="receipt-val">Arbitrum → Base</span>
+                      </div>
+                      <div className="receipt-row">
+                        <span className="receipt-label">Amount</span>
+                        <span className="receipt-val receipt-val--highlight">
+                          1 USDC
+                        </span>
+                      </div>
+                      <div className="receipt-row">
+                        <span className="receipt-label">Wallet</span>
+                        <span className="receipt-val receipt-val--mono">
+                          {shortAddr(embeddedWallet?.address || "")}
+                        </span>
+                      </div>
+                      <div className="receipt-row">
+                        <span className="receipt-label">Session</span>
+                        <span className="receipt-val receipt-val--mono">
+                          {shortAddr(sessionSignerAddress || "")}
+                        </span>
+                      </div>
+                      <div className="receipt-row">
+                        <span className="receipt-label">Tx Hash</span>
+                        <span className="receipt-val receipt-val--mono">
+                          {shortAddr(txHash)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="receipt-footer">
+                      Gas fully sponsored · Session key executed
+                    </div>
+                  </div>
+                ) : (
+                  <div className="receipt-waiting">
+                    <span className="waiting-dot" />
+                    Awaiting execution…
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* ── Bottom Content ──────────────────────────── */}
-      <div className="content content-bottom">
-        {/* ── Error Alert ────────────────────────────── */}
-        {error && (
-          <div className="alert-error">
-            <span className="alert-label">Error</span>
-            <span className="alert-message">{error}</span>
+      {/* ── Error Toast ──────────────────────────── */}
+      {error && (
+        <div className="error-toast">
+          <span className="error-toast-mark">!</span>
+          <div className="error-toast-body">
+            <span className="error-toast-title">Error</span>
+            <span className="error-toast-msg">{error}</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
