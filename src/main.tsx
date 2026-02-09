@@ -24,6 +24,7 @@ createRoot(document.getElementById("root")!).render(
           ethereum: {
             createOnLogin: "all-users",
           },
+          showWalletUIs: false,
         },
       }}
     >

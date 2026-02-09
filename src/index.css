@@ -1,48 +1,45 @@
 /* ═══════════════════════════════════════════════════════
-   NEXUS BRIDGE — Onyx & Signal
-   Dark control-surface aesthetic with acid-green accents
+   NEXUS BRIDGE — Modern Fintech Foundation
+   Light · Spacious · Professional
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
   /* ── Surfaces ──────────────────────────────────── */
-  --bg:             #050506;
-  --bg-elevated:    #0C0C0F;
-  --bg-card:        #0F0F13;
-  --bg-card-hover:  #141419;
-  --bg-subtle:      #1A1A21;
+  --bg:             #F7F8FA;
+  --bg-card:        #FFFFFF;
+  --bg-card-hover:  #FAFBFC;
+  --bg-muted:       #F1F3F5;
 
   /* ── Borders ───────────────────────────────────── */
-  --border:         #1C1C24;
-  --border-strong:  #2A2A35;
-  --border-focus:   var(--accent);
+  --border:         #E5E7EB;
+  --border-strong:  #D1D5DB;
 
   /* ── Text ──────────────────────────────────────── */
-  --text:           #EDEDEF;
-  --text-secondary: #8B8B94;
-  --text-muted:     #4E4E58;
+  --text:           #111827;
+  --text-secondary: #6B7280;
+  --text-muted:     #9CA3AF;
 
-  /* ── Accent — Acid Chartreuse ──────────────────── */
-  --accent:         #CCFF00;
-  --accent-hover:   #B8E600;
-  --accent-dim:     rgba(204, 255, 0, 0.12);
-  --accent-glow:    rgba(204, 255, 0, 0.06);
-  --accent-text:    #050506;
+  /* ── Primary — Indigo ─────────────────────────── */
+  --primary:        #6366F1;
+  --primary-hover:  #4F46E5;
+  --primary-light:  #EEF2FF;
+  --primary-50:     rgba(99, 102, 241, 0.07);
 
   /* ── Success ───────────────────────────────────── */
-  --success:        #34D399;
-  --success-dim:    rgba(52, 211, 153, 0.12);
+  --success:        #10B981;
+  --success-light:  #D1FAE5;
 
   /* ── Error ─────────────────────────────────────── */
-  --error:          #F87171;
-  --error-dim:      rgba(248, 113, 113, 0.10);
+  --error:          #EF4444;
+  --error-light:    #FEE2E2;
 
   /* ── Shadows ───────────────────────────────────── */
-  --shadow-sm:  0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md:  0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg:  0 8px 32px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 24px var(--accent-glow), 0 0 48px var(--accent-glow);
+  --shadow-xs:  0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md:  0 4px 14px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg:  0 10px 28px rgba(0, 0, 0, 0.07), 0 4px 10px rgba(0, 0, 0, 0.03);
 
   /* ── Radii ─────────────────────────────────────── */
   --radius:    12px;
@@ -51,9 +48,8 @@
   --radius-xl: 20px;
 
   /* ── Typography ────────────────────────────────── */
-  --font-display: 'Syne', system-ui, sans-serif;
-  --font-body:    'DM Sans', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', 'Menlo', monospace;
+  --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Menlo', monospace;
 
   /* ── Motion ────────────────────────────────────── */
   --ease:        cubic-bezier(0.25, 0.1, 0.25, 1);
@@ -64,7 +60,7 @@
   --step-w: 356px;
 
   /* ── Apply base ────────────────────────────────── */
-  font-family: var(--font-body);
+  font-family: var(--font-sans);
   font-weight: 400;
   line-height: 1.6;
   color: var(--text);
@@ -93,17 +89,17 @@ body {
 }
 
 ::selection {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--primary-light);
+  color: var(--primary);
 }
 
 /* ── Focus ────────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
 
-/* ── Scrollbar (Webkit) ──────────────────────────── */
+/* ── Scrollbar ───────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -123,8 +119,8 @@ body {
 code {
   font-family: var(--font-mono);
   font-size: 0.85em;
-  color: var(--accent);
-  background: var(--accent-dim);
+  color: var(--primary);
+  background: var(--primary-light);
   padding: 0.15em 0.4em;
   border-radius: var(--radius-sm);
 }

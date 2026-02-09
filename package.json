@@ -12,6 +12,7 @@
   "dependencies": {
     "@biconomy/abstractjs": "^1.1.21",
     "@privy-io/react-auth": "^3.13.1",
+    "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "viem": "^2.45.2"
