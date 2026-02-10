@@ -6,16 +6,25 @@ import {
   MEEVersion,
 } from "@biconomy/abstractjs";
 import { http, type Address } from "viem";
-import type { SignAuthorizationReturnType } from "viem/accounts";
 import { SUPPORTED_CHAINS, BICONOMY_API_KEY } from "../config";
 
+/**
+ * Creates a MEE client + session-extended MEE client for the given signer.
+ *
+ * - For the **user flow** (signing authorization, deploying, installing SS,
+ *   granting permissions), pass the user's EOA provider as `signer`.
+ * - For the **session-signer flow** (calling `usePermission`), pass the
+ *   session `PrivateKeyAccount` as `signer`.
+ *
+ * In both cases `accountAddress` must be the user's EOA address (the
+ * 7702-delegated Nexus account).
+ */
 export async function createSessionMeeClient(
-  provider: any,
+  signer: any,
   walletAddress: Address,
-  authorization: SignAuthorizationReturnType
 ) {
   const mcAccount = await toMultichainNexusAccount({
-    signer: provider,
+    signer,
     chainConfigurations: SUPPORTED_CHAINS.map((chain) => ({
       chain,
       transport: http(),

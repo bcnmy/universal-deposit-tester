@@ -161,25 +161,18 @@
 .hero {
   position: relative;
   z-index: 1;
-  text-align: center;
-  padding: 2.5rem 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.75rem 1.5rem 1.5rem;
   flex-shrink: 0;
-}
-
-.hero-heading {
-  font-family: var(--font-sans);
-  font-size: clamp(1.5rem, 3.5vw, 2rem);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
-  color: var(--text);
-  animation: hero-in 0.5s var(--ease-out) both;
+  animation: hero-in 0.45s var(--ease-out) both;
 }
 
 @keyframes hero-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -187,23 +180,120 @@
   }
 }
 
-.hero-sub {
-  font-size: 0.88rem;
+/* ── Hero Label ───────────────────────────────────────── */
+.hero-label {
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-muted);
-  margin-top: 0.5rem;
-  font-weight: 400;
-  animation: hero-in 0.5s var(--ease-out) 0.08s both;
+  margin-bottom: 0.75rem;
+}
+
+/* ── Address Row ──────────────────────────────────────── */
+.hero-address-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  max-width: 720px;
+  width: 100%;
 }
 
 .hero-address {
   font-family: var(--font-mono);
-  font-size: clamp(1rem, 2.2vw, 1.35rem);
+  font-size: clamp(0.88rem, 2.2vw, 1.3rem);
   font-weight: 500;
   color: var(--text);
-  margin-top: 0.75rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   word-break: break-all;
-  animation: hero-in 0.5s var(--ease-out) 0.16s both;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── Copy Button ──────────────────────────────────────── */
+.hero-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.hero-copy-btn:hover {
+  border-color: var(--border-strong);
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+}
+
+.hero-copy-btn:active {
+  transform: scale(0.96);
+}
+
+.hero-copy-btn--copied {
+  border-color: var(--success);
+  color: var(--success);
+  background: transparent;
+}
+
+/* ── Divider ──────────────────────────────────────────── */
+.hero-divider {
+  width: 32px;
+  height: 1px;
+  background: var(--border);
+  margin: 1rem 0;
+}
+
+/* ── Chain Tags ───────────────────────────────────────── */
+.hero-chains {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  animation: hero-in 0.45s var(--ease-out) 0.1s both;
+}
+
+.hero-chain-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: color 0.15s var(--ease);
+}
+
+.hero-chain-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Empty State (not connected) ──────────────────────── */
+.hero-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.5rem 0;
+}
+
+.hero-empty-sub {
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 /* ── Chain Step Action ────────────────────────────────── */
@@ -244,12 +334,10 @@
   border-radius: var(--radius);
   cursor: pointer;
   transition: all 0.2s var(--ease);
-  box-shadow: var(--shadow-xs);
 }
 
 .chain-select-trigger:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
 }
 
 .chain-dot-lg {
@@ -279,7 +367,6 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
   padding: 0.3rem;
   z-index: 9999;
   animation: dropdown-in 0.18s var(--ease-out) both;
@@ -329,6 +416,129 @@
 .chain-option-check {
   margin-left: auto;
   color: var(--primary);
+}
+
+/* ── Recipient Toggle & Input ────────────────────────── */
+.recipient-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s var(--ease);
+  white-space: nowrap;
+}
+
+.recipient-toggle:hover {
+  color: var(--text-secondary);
+}
+
+.recipient-toggle input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+}
+
+.recipient-input-wrap {
+  position: relative;
+  margin-top: 0.6rem;
+}
+
+.recipient-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--bg-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.75rem;
+  transition: all 0.2s var(--ease);
+  outline: none;
+}
+
+.recipient-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+.recipient-input:hover {
+  border-color: var(--border-strong);
+}
+
+.recipient-input:focus {
+  border-color: var(--primary);
+  background: var(--bg-card);
+}
+
+.recipient-input--invalid {
+  border-color: var(--error);
+}
+
+.recipient-input--invalid:focus {
+  border-color: var(--error);
+}
+
+.done-value--recipient {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ── Full-width Continue Button (flush to card bottom) ── */
+.btn-continue-wrap {
+  margin: 1rem -1.85rem -1.75rem;
+}
+
+.btn-continue-full {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-top: 1px solid rgba(99, 102, 241, 0.15);
+  /* inner radius = outer radius − card border width */
+  border-radius: 0 0 calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px);
+  background: var(--primary);
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+}
+
+.btn-continue-full:hover {
+  background: var(--primary-hover);
+}
+
+.btn-continue-full:active {
+  filter: brightness(0.95);
+}
+
+.btn-continue-full:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-continue-full:disabled:hover {
+  background: var(--primary);
+}
+
+.dest-confirmed-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.done-row + .done-row {
+  margin-top: 0.25rem;
 }
 
 /* ── Pipeline Section ────────────────────────────────── */
@@ -461,12 +671,11 @@
   transition: all 0.35s var(--ease);
 }
 
-/* Active — indigo ring with subtle glow */
+/* Active — indigo ring */
 .step[data-status="active"] .step-num {
   color: #FFFFFF;
   border-color: var(--primary);
   background: var(--primary);
-  box-shadow: 0 0 0 4px var(--primary-50);
 }
 
 /* Completed — filled indigo */
@@ -481,7 +690,6 @@
   color: #FFFFFF;
   border-color: var(--error);
   background: var(--error);
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.08);
 }
 
 /* ── Step Card ───────────────────────────────────────── */
@@ -491,29 +699,25 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.5rem 1.6rem;
+  padding: 1.75rem 1.85rem;
   margin: 0 10px;
-  box-shadow: var(--shadow-xs);
   transition: all 0.3s var(--ease);
 }
 
-/* Active — indigo border + subtle glow */
+/* Active — indigo border */
 .step[data-status="active"] .step-card {
   border-color: var(--primary);
-  box-shadow: var(--shadow-sm), 0 0 0 3px var(--primary-50);
 }
 
 /* Completed — muted */
 .step[data-status="completed"] .step-card {
   background: var(--bg-card-hover);
   border-color: var(--border);
-  box-shadow: none;
 }
 
 /* Error — red border */
 .step[data-status="error"] .step-card {
   border-color: var(--error);
-  box-shadow: var(--shadow-xs), 0 0 0 3px rgba(239, 68, 68, 0.06);
 }
 
 /* ── Card Header ─────────────────────────────────────── */
@@ -526,8 +730,8 @@
 
 /* ── Card Icon (colorful accent) ─────────────────────── */
 .card-icon {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -549,7 +753,7 @@
 /* ── Card Content ────────────────────────────────────── */
 .card-title {
   font-family: var(--font-sans);
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -0.01em;
@@ -560,10 +764,10 @@
 }
 
 .card-desc {
-  font-size: 0.8rem;
+  font-size: 0.84rem;
   color: var(--text-secondary);
   line-height: 1.6;
-  margin-bottom: 1.2rem;
+  margin-bottom: 1.35rem;
 }
 
 .step[data-status="pending"] .card-desc {
@@ -599,26 +803,22 @@
 
 .btn-primary:hover {
   background: var(--primary-hover);
-  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
   transform: translateY(-1px);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: none;
 }
 
 .btn-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
-  box-shadow: none;
 }
 
 .btn-primary:disabled:hover {
   background: var(--primary);
   transform: none;
-  box-shadow: none;
 }
 
 /* Loading — spinner icon */
@@ -701,6 +901,26 @@
   color: var(--text-muted);
 }
 
+.done-value--link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s var(--ease), opacity 0.15s var(--ease);
+  cursor: pointer;
+}
+
+.done-value--link:hover {
+  color: var(--primary-hover);
+  opacity: 0.85;
+}
+
+.done-value--link svg {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
 /* ── Receipt Card ────────────────────────────────────── */
 .step-card--receipt {
   background: var(--bg-card);
@@ -709,7 +929,6 @@
 .step[data-status="completed"] .step-card--receipt {
   background: var(--bg-card);
   border-color: var(--primary);
-  box-shadow: var(--shadow-md), 0 0 0 3px var(--primary-50);
 }
 
 .step[data-status="completed"] .step-card--receipt .card-header .card-icon {
@@ -800,6 +1019,20 @@
   font-size: 0.72rem;
 }
 
+.receipt-val--link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s var(--ease);
+  cursor: pointer;
+}
+
+.receipt-val--link:hover {
+  color: var(--primary-hover);
+}
+
 .receipt-footer {
   margin-top: 0.9rem;
   padding-top: 0.7rem;
@@ -841,7 +1074,6 @@
   background: var(--bg-card);
   border: 1px solid var(--error);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
   animation: toast-in 0.35s var(--ease-out) both;
 }
 
@@ -883,12 +1115,14 @@
   color: var(--text-secondary);
   line-height: 1.5;
   word-break: break-word;
+  max-height: 160px;
+  overflow-y: auto;
 }
 
 /* ── Responsive ──────────────────────────────────────── */
 @media (max-width: 640px) {
   :root {
-    --step-w: 290px;
+    --step-w: 320px;
   }
 
   .topbar {
@@ -896,11 +1130,15 @@
   }
 
   .hero {
-    padding: 1.75rem 1rem 0.75rem;
+    padding: 1.75rem 1rem 1rem;
   }
 
-  .hero-heading {
-    font-size: 1.35rem;
+  .hero-address {
+    font-size: 0.74rem;
+  }
+
+  .hero-chains {
+    gap: 0.35rem;
   }
 
   .step-num {
@@ -919,6 +1157,10 @@
     height: 26px;
   }
 
+  .btn-continue-wrap {
+    margin: 1rem -1.2rem -1.15rem;
+  }
+
   .pipeline-viewport::before,
   .pipeline-viewport::after {
     width: 48px;
@@ -931,6 +1173,6 @@
 
 @media (min-width: 1200px) {
   :root {
-    --step-w: 380px;
+    --step-w: 450px;
   }
 }

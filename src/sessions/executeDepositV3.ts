@@ -1,5 +1,12 @@
-import { encodeFunctionData, zeroAddress, type Address, type Hash } from "viem";
+import {
+  encodeFunctionData,
+  erc20Abi,
+  zeroAddress,
+  type Address,
+  type Hash,
+} from "viem";
 import { ACROSS_SPOKEPOOL, USDC, DEPOSIT_V3_ABI } from "../config";
+import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
 
 export type ExecuteDepositV3Params = {
@@ -7,8 +14,10 @@ export type ExecuteDepositV3Params = {
   sessionMeeClient: any;
   /** Session details returned from grantPermissionTypedDataSign */
   sessionDetails: SessionDetails;
-  /** The depositor / recipient EOA address */
+  /** The depositor EOA address */
   walletAddress: Address;
+  /** The recipient address on the destination chain (defaults to walletAddress) */
+  recipient?: Address;
   /** Source chain ID (where USDC leaves from) */
   sourceChainId: number;
   /** Destination chain ID (where USDC arrives) */
@@ -24,6 +33,7 @@ export async function executeDepositV3(
     sessionMeeClient,
     sessionDetails,
     walletAddress,
+    recipient = walletAddress,
     sourceChainId,
     destinationChainId,
     amount,
@@ -31,12 +41,20 @@ export async function executeDepositV3(
 
   const now = Math.floor(Date.now() / 1000);
 
-  const calldata = encodeFunctionData({
+  // Approve the SpokePool to spend USDC
+  const approveCalldata = encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "approve",
+    args: [ACROSS_SPOKEPOOL[sourceChainId], amount],
+  });
+
+  // Build the depositV3 call
+  const depositCalldata = encodeFunctionData({
     abi: DEPOSIT_V3_ABI,
     functionName: "depositV3",
     args: [
       walletAddress,                   // depositor
-      walletAddress,                   // recipient
+      recipient,                       // recipient
       USDC[sourceChainId],             // inputToken  (USDC on source)
       USDC[destinationChainId],        // outputToken (USDC on destination)
       amount,                          // inputAmount
@@ -51,21 +69,30 @@ export async function executeDepositV3(
   });
 
   const result = await sessionMeeClient.usePermission({
+    sessionDetails,
     mode: "ENABLE_AND_USE",
     instructions: [
       {
         calls: [
           {
+            to: USDC[sourceChainId],
+            data: approveCalldata,
+          },
+          {
             to: ACROSS_SPOKEPOOL[sourceChainId],
-            data: calldata,
+            data: depositCalldata,
             value: 0n,
           },
         ],
         chainId: sourceChainId,
+        ...ScheduledExecutionBounds,
       },
     ],
-    sessionDetails,
-    sponsorship: true,
+    verificationGasLimit: 2_500_000n,
+    feeToken: {
+      address: USDC[sourceChainId],
+      chainId: sourceChainId,
+    },
     simulation: {
       simulate: true,
     },

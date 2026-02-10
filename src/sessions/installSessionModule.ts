@@ -2,28 +2,25 @@ import {
   toSmartSessionsModule,
   meeSessionActions,
 } from "@biconomy/abstractjs";
-import type { SignAuthorizationReturnType } from "viem/accounts";
+import type { Hash } from "viem";
 
 export async function installSessionModule(params: {
   sessionMeeClient: ReturnType<typeof meeSessionActions> & any;
   smartSessionsValidator: ReturnType<typeof toSmartSessionsModule>;
-  authorization: SignAuthorizationReturnType;
-}) {
-  const { sessionMeeClient, smartSessionsValidator, authorization } = params;
+}): Promise<{ hash: Hash } | null> {
+  const { sessionMeeClient, smartSessionsValidator } = params;
 
   const payload = await sessionMeeClient.prepareForPermissions({
     smartSessionsValidator,
     sponsorship: true,
-    delegate: true,
-    authorizations: [authorization],
-    multichain7702Auth: true,
+    simulation: { simulate: true },
   });
 
   if (payload) {
-    const receipt = await sessionMeeClient.waitForSupertransactionReceipt({
+    await sessionMeeClient.waitForSupertransactionReceipt({
       hash: payload.hash,
     });
-    return receipt;
+    return { hash: payload.hash };
   }
 
   // Module already installed, no tx needed

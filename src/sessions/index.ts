@@ -7,5 +7,12 @@ export { deployAccount } from "./deployAccount";
 export { installSessionModule } from "./installSessionModule";
 export { grantDepositV3Permission } from "./grantDepositV3Permission";
 export { executeDepositV3, type ExecuteDepositV3Params } from "./executeDepositV3";
+export {
+  saveSessionKey,
+  loadSessionKey,
+  saveSessionDetails,
+  loadSessionDetails,
+  clearSession,
+} from "./sessionStore";
 export type { SessionDetails } from "./types";
 
