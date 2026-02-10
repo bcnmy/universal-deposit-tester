@@ -43,90 +43,96 @@ export function PaymentPage({ address }: PaymentPageProps) {
 
       {/* Card */}
       <div className="pay-card">
-        {/* QR Code */}
-        <div className="pay-qr-wrap">
-          <div className="pay-qr-inner">
-            <QRCode
-              value={pageUrl}
-              size={200}
-              bgColor="transparent"
-              fgColor="#111827"
-              level="M"
-            />
+        {/* Left panel – QR Code + Address */}
+        <div className="pay-card-left">
+          <div className="pay-qr-wrap">
+            <div className="pay-qr-inner">
+              <QRCode
+                value={pageUrl}
+                size={200}
+                bgColor="transparent"
+                fgColor="#111827"
+                level="M"
+              />
+            </div>
+          </div>
+
+          {/* Address */}
+          <div className="pay-address-box">
+            <span className="pay-address-full">{address}</span>
+            <button
+              className={`pay-copy-btn${copied ? " pay-copy-btn--copied" : ""}`}
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <>
+                  <Check size={14} strokeWidth={2.5} />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy size={14} />
+                  Copy Address
+                </>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Heading */}
-        <h1 className="pay-heading">Send Tokens</h1>
-        <p className="pay-sub">
-          Send {TOKEN_SYMBOLS.join(", ")} to the address below on any of the
-          supported chains. It will be automatically forwarded to the recipient.
-        </p>
+        {/* Right panel – Content */}
+        <div className="pay-card-right">
+          {/* Heading */}
+          <h1 className="pay-heading">Send Tokens</h1>
+          <p className="pay-sub">
+            Send {TOKEN_SYMBOLS.join(", ")} to the address below on any of the
+            supported chains. It will be automatically forwarded to the
+            recipient.
+          </p>
 
-        {/* Address */}
-        <div className="pay-address-box">
-          <span className="pay-address-full">{address}</span>
-          <button
-            className={`pay-copy-btn${copied ? " pay-copy-btn--copied" : ""}`}
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <>
-                <Check size={14} strokeWidth={2.5} />
-                Copied
-              </>
-            ) : (
-              <>
-                <Copy size={14} />
-                Copy Address
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Supported tokens */}
-        <div className="pay-chains-section">
-          <span className="pay-chains-label">Supported Tokens</span>
-          <div className="pay-chains-grid">
-            {TOKEN_SYMBOLS.map((symbol) => (
-              <div key={symbol} className="pay-chain-pill">
-                <span>{symbol}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Supported chains */}
-        <div className="pay-chains-section">
-          <span className="pay-chains-label">Supported Chains</span>
-          <div className="pay-chains-grid">
-            {SUPPORTED_CHAINS.map((chain) => {
-              const meta = CHAIN_META[chain.id];
-              return (
-                <div key={chain.id} className="pay-chain-pill">
-                  <span
-                    className="pay-chain-dot"
-                    style={{ background: meta.color }}
-                  />
-                  <span>{meta.name}</span>
+          {/* Supported tokens */}
+          <div className="pay-chains-section">
+            <span className="pay-chains-label">Supported Tokens</span>
+            <div className="pay-chains-grid">
+              {TOKEN_SYMBOLS.map((symbol) => (
+                <div key={symbol} className="pay-chain-pill">
+                  <span>{symbol}</span>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Info note */}
-        <div className="pay-note">
-          Deposits on any supported chain are automatically bridged to the
-          recipient's destination chain via{" "}
-          <a
-            href="https://across.to"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="pay-note-link"
-          >
-            Across Protocol <ExternalLink size={10} />
-          </a>
+          {/* Supported chains */}
+          <div className="pay-chains-section">
+            <span className="pay-chains-label">Supported Chains</span>
+            <div className="pay-chains-grid">
+              {SUPPORTED_CHAINS.map((chain) => {
+                const meta = CHAIN_META[chain.id];
+                return (
+                  <div key={chain.id} className="pay-chain-pill">
+                    <span
+                      className="pay-chain-dot"
+                      style={{ background: meta.color }}
+                    />
+                    <span>{meta.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Info note */}
+          <div className="pay-note">
+            Deposits on any supported chain are automatically bridged to the
+            recipient's destination chain via{" "}
+            <a
+              href="https://across.to"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pay-note-link"
+            >
+              Across Protocol <ExternalLink size={10} />
+            </a>
+          </div>
         </div>
       </div>
 
