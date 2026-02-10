@@ -21,16 +21,16 @@ export function InstallSessionsStep({
 }: Props) {
   return (
     <StepCard
-      index={5}
+      index={4}
       status={status}
-      title="Install Sessions"
-      description="Generate a session signer and install the Smart Sessions module."
+      title="Deploy & Install Sessions"
+      description="Activate the EIP-7702 delegation and install the Smart Sessions module in a single transaction."
       stepRef={stepRef}
     >
       <StepIndicator
         status={installStatus}
-        loadingLabel="Installing module…"
-        doneLabel="Installed"
+        loadingLabel="Deploying & installing module…"
+        doneLabel="Deployed & installed"
         doneValue={
           sessionSignerAddress ? shortAddr(sessionSignerAddress) : undefined
         }

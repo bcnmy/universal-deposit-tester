@@ -3,22 +3,31 @@ import {
   meeSessionActions,
 } from "@biconomy/abstractjs";
 import type { Hash } from "viem";
-import { arbitrum } from "viem/chains";
-import { USDC } from "../config";
+import type { SignAuthorizationReturnType } from "viem/accounts";
 
 export async function installSessionModule(params: {
   sessionMeeClient: ReturnType<typeof meeSessionActions> & any;
   smartSessionsValidator: ReturnType<typeof toSmartSessionsModule>;
+  /** Optional 7702 authorization — when provided the EIP-7702 delegation
+   *  is propagated on-chain in the same supertransaction that installs the
+   *  sessions module, saving a separate deploy step. */
+  authorization?: SignAuthorizationReturnType;
 }): Promise<{ hash: Hash } | null> {
-  const { sessionMeeClient, smartSessionsValidator } = params;
+  const { sessionMeeClient, smartSessionsValidator, authorization } = params;
 
   const payload = await sessionMeeClient.prepareForPermissions({
     smartSessionsValidator,
-    feeToken: {
-      address: USDC[arbitrum.id],
-      chainId: arbitrum.id,
-    },
+    sponsorship: true,
     simulation: { simulate: true },
+    // Piggy-back the 7702 auth so the delegation is activated on all chains
+    // in the same supertransaction that installs the sessions module.
+    ...(authorization
+      ? {
+          delegate: true,
+          multichain7702Auth: true,
+          authorizations: [authorization],
+        }
+      : {}),
   });
 
   if (payload) {

@@ -11,10 +11,10 @@ interface Props {
 export function GrantPermissionStep({ status, grantStatus, stepRef }: Props) {
   return (
     <StepCard
-      index={6}
+      index={5}
       status={status}
       title="Grant Permission"
-      description={`Authorize the session signer to call depositV3 on Across SpokePool.`}
+      description={`Authorize the session signer to call depositV3 on Across SpokePool for USDC, USDT & WETH.`}
       stepRef={stepRef}
     >
       <StepIndicator

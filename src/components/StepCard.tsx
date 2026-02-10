@@ -4,7 +4,7 @@ import type { StepStatus } from "../types";
 import { STEP_THEMES } from "../constants";
 
 interface StepCardProps {
-  /** Zero-based step index (0–8) */
+  /** Zero-based step index (0–5) */
   index: number;
   status: StepStatus;
   title: string;

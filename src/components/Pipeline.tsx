@@ -1,13 +1,7 @@
 import type { PipelineState } from "../hooks/usePipeline";
 import { ConnectWalletStep } from "./steps/ConnectWalletStep";
 import { SelectDestinationStep } from "./steps/SelectDestinationStep";
-import { SignAuthorizationStep } from "./steps/SignAuthorizationStep";
-import { InitializeNexusStep } from "./steps/InitializeNexusStep";
-import { DeployAccountStep } from "./steps/DeployAccountStep";
-import { InstallSessionsStep } from "./steps/InstallSessionsStep";
-import { GrantPermissionStep } from "./steps/GrantPermissionStep";
-import { ExecuteBridgeStep } from "./steps/ExecuteBridgeStep";
-import { ReceiptStep } from "./steps/ReceiptStep";
+import { InitializingCard } from "./steps/InitializingCard";
 
 interface PipelineProps {
   pipeline: PipelineState;
@@ -18,6 +12,9 @@ export function Pipeline({ pipeline: p }: PipelineProps) {
   const ref = (i: number) => (el: HTMLDivElement | null) => {
     p.stepRefs.current[i] = el;
   };
+
+  // Show the initializing card once the destination has been confirmed
+  const showInitializing = p.destConfirmed;
 
   return (
     <section className="pipeline-section">
@@ -51,68 +48,18 @@ export function Pipeline({ pipeline: p }: PipelineProps) {
             stepRef={ref(1)}
           />
 
-          {/* Step 3 — Sign EIP-7702 */}
-          <SignAuthorizationStep
-            status={s[2]}
-            authStatus={p.authStatus}
-            stepRef={ref(2)}
-          />
-
-          {/* Step 4 — Initialize Nexus */}
-          <InitializeNexusStep
-            status={s[3]}
-            setupStatus={p.setupStatus}
-            walletAddress={p.embeddedWallet?.address}
-            stepRef={ref(3)}
-          />
-
-          {/* Step 5 — Deploy Account */}
-          <DeployAccountStep
-            status={s[4]}
-            deployStatus={p.deployStatus}
-            deployTxHash={p.deployTxHash}
-            stepRef={ref(4)}
-          />
-
-          {/* Step 6 — Install Sessions */}
-          <InstallSessionsStep
-            status={s[5]}
-            installStatus={p.installStatus}
-            installTxHash={p.installTxHash}
-            sessionSignerAddress={p.sessionSignerAddress}
-            stepRef={ref(5)}
-          />
-
-          {/* Step 7 — Grant Permission */}
-          <GrantPermissionStep
-            status={s[6]}
-            grantStatus={p.grantStatus}
-            stepRef={ref(6)}
-          />
-
-          {/* Step 8 — Execute Bridge */}
-          <ExecuteBridgeStep
-            status={s[7]}
-            execStatus={p.execStatus}
-            txHash={p.txHash}
-            destChainId={p.destChainId}
-            stepRef={ref(7)}
-          />
-
-          {/* Step 9 — Receipt */}
-          <ReceiptStep
-            status={s[8]}
-            txHash={p.txHash}
-            destChainId={p.destChainId}
-            walletAddress={p.embeddedWallet?.address || ""}
-            recipientIsSelf={p.recipientIsSelf}
-            recipientAddr={p.recipientAddr}
-            sessionSignerAddress={p.sessionSignerAddress}
-            stepRef={ref(8)}
-          />
+          {/* Steps 3–6 — Combined into a single initializing card */}
+          {showInitializing && (
+            <InitializingCard
+              authStatus={p.authStatus}
+              setupStatus={p.setupStatus}
+              installStatus={p.installStatus}
+              grantStatus={p.grantStatus}
+              stepRef={ref(2)}
+            />
+          )}
         </div>
       </div>
     </section>
   );
 }
-

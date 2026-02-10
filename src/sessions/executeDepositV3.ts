@@ -5,8 +5,7 @@ import {
   type Address,
   type Hash,
 } from "viem";
-import { arbitrum } from "viem/chains";
-import { ACROSS_SPOKEPOOL, USDC, DEPOSIT_V3_ABI } from "../config";
+import { ACROSS_SPOKEPOOL, SUPPORTED_TOKENS, DEPOSIT_V3_ABI } from "../config";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
 
@@ -19,12 +18,14 @@ export type ExecuteDepositV3Params = {
   walletAddress: Address;
   /** The recipient address on the destination chain (defaults to walletAddress) */
   recipient?: Address;
-  /** Source chain ID (where USDC leaves from) */
+  /** Source chain ID (where the token leaves from) */
   sourceChainId: number;
-  /** Destination chain ID (where USDC arrives) */
+  /** Destination chain ID (where the token arrives) */
   destinationChainId: number;
-  /** Amount of USDC to bridge (6 decimals) */
+  /** Amount to bridge (in token's native decimals) */
   amount: bigint;
+  /** Token symbol (e.g. "USDC", "USDT", "WETH") — defaults to "USDC" */
+  tokenSymbol?: string;
 };
 
 export async function executeDepositV3(
@@ -38,11 +39,31 @@ export async function executeDepositV3(
     sourceChainId,
     destinationChainId,
     amount,
+    tokenSymbol = "USDC",
   } = params;
+
+  const token = SUPPORTED_TOKENS[tokenSymbol];
+  if (!token) throw new Error(`Unsupported token: ${tokenSymbol}`);
+
+  const inputToken = token.addresses[sourceChainId];
+  const outputToken = token.addresses[destinationChainId];
+  if (!inputToken) throw new Error(`${tokenSymbol} not available on source chain ${sourceChainId}`);
+  if (!outputToken) throw new Error(`${tokenSymbol} not available on destination chain ${destinationChainId}`);
+
+  // Query on-chain state to decide if the session permission has already
+  // been enabled on the source chain.  `checkEnabledPermissions` returns a
+  // mapping of  permissionId → chainId → isEnabled.
+  const enabledMap: Record<string, Record<number, boolean>> =
+    await sessionMeeClient.checkEnabledPermissions(sessionDetails);
+
+  const alreadyEnabled = Object.values(enabledMap).some(
+    (chainMap) => chainMap[sourceChainId] === true,
+  );
+  const mode = alreadyEnabled ? "USE" : "ENABLE_AND_USE";
 
   const now = Math.floor(Date.now() / 1000);
 
-  // Approve the SpokePool to spend USDC
+  // Approve the SpokePool to spend the token
   const approveCalldata = encodeFunctionData({
     abi: erc20Abi,
     functionName: "approve",
@@ -56,8 +77,8 @@ export async function executeDepositV3(
     args: [
       walletAddress,                   // depositor
       recipient,                       // recipient
-      USDC[sourceChainId],             // inputToken  (USDC on source)
-      USDC[destinationChainId],        // outputToken (USDC on destination)
+      inputToken,                      // inputToken  (on source chain)
+      outputToken,                     // outputToken (on destination chain)
       amount,                          // inputAmount
       amount - (amount / 200n),        // outputAmount (0.5% slippage buffer)
       BigInt(destinationChainId),      // destinationChainId
@@ -71,12 +92,12 @@ export async function executeDepositV3(
 
   const result = await sessionMeeClient.usePermission({
     sessionDetails,
-    mode: "ENABLE_AND_USE",
+    mode,
     instructions: [
       {
         calls: [
           {
-            to: USDC[sourceChainId],
+            to: inputToken,
             data: approveCalldata,
           },
           {
@@ -90,12 +111,9 @@ export async function executeDepositV3(
       },
     ],
     verificationGasLimit: 2_500_000n,
-    feeToken: {
-      address: USDC[arbitrum.id],
-      chainId: arbitrum.id,
-    },
+    sponsorship: true,
     simulation: {
-      simulate: false,
+      simulate: true,
     },
   });
 
