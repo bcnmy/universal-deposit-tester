@@ -13,6 +13,9 @@ export function buildDepositV3Actions(
   const approveSelector = toFunctionSelector(
     getAbiItem({ abi: erc20Abi, name: "approve" })
   );
+  const transferSelector = toFunctionSelector(
+    getAbiItem({ abi: erc20Abi, name: "transfer" })
+  );
 
   const supported = chainIds.filter((id) => ACROSS_SPOKEPOOL[id] && USDC[id]);
 
@@ -21,6 +24,13 @@ export function buildDepositV3Actions(
     {
       actionTarget: USDC[chainId],
       actionTargetSelector: approveSelector,
+      actionPolicies: [policy],
+      chainId,
+    },
+    // Allow transfer on USDC (needed for MEE fee payment)
+    {
+      actionTarget: USDC[chainId],
+      actionTargetSelector: transferSelector,
       actionPolicies: [policy],
       chainId,
     },

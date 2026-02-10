@@ -21,7 +21,7 @@ export const USDC: Record<number, Address> = {
   [arbitrum.id]: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
 };
 
-// ─── Biconomy API Key (for sponsored transactions) ──────────────────
+// ─── Biconomy API Key (for MEE service authentication) ──────────────
 export const BICONOMY_API_KEY = import.meta.env.VITE_BICONOMY_API_KEY as string;
 
 // ─── Chains used in this app ─────────────────────────────────────────

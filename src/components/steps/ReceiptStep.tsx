@@ -71,7 +71,7 @@ export function ReceiptStep({
           </div>
 
           <div className="receipt-footer">
-            Gas fully sponsored · Session key executed
+            Fees paid in USDC on Arbitrum · Session key executed
           </div>
         </div>
       ) : (

@@ -1,6 +1,7 @@
 import type { Address, Hash } from "viem";
 import type { SignAuthorizationReturnType } from "viem/accounts";
-import { SUPPORTED_CHAINS } from "../config";
+import { arbitrum } from "viem/chains";
+import { SUPPORTED_CHAINS, USDC } from "../config";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 
 /**
@@ -26,8 +27,11 @@ export async function deployAccount(params: {
   // 1. Get quote with simulation
   const quote = await meeClient.getQuote({
     instructions,
-    sponsorship: true,
     delegate: true,
+    feeToken: {
+      address: USDC[arbitrum.id],
+      chainId: arbitrum.id,
+    },
     authorizations: [authorization],
     multichain7702Auth: true,
     simulation: { simulate: true },

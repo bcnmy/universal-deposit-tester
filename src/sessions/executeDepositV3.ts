@@ -5,6 +5,7 @@ import {
   type Address,
   type Hash,
 } from "viem";
+import { arbitrum } from "viem/chains";
 import { ACROSS_SPOKEPOOL, USDC, DEPOSIT_V3_ABI } from "../config";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
@@ -90,11 +91,11 @@ export async function executeDepositV3(
     ],
     verificationGasLimit: 2_500_000n,
     feeToken: {
-      address: USDC[sourceChainId],
-      chainId: sourceChainId,
+      address: USDC[arbitrum.id],
+      chainId: arbitrum.id,
     },
     simulation: {
-      simulate: true,
+      simulate: false,
     },
   });
 

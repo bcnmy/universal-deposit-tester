@@ -24,7 +24,7 @@ export function ExecuteBridgeStep({
       index={7}
       status={status}
       title="Execute Bridge"
-      description={`Bridge 1 USDC from Arbitrum → ${CHAIN_META[destChainId].name} via Across with fully sponsored gas.`}
+      description={`Bridge 1 USDC from Arbitrum → ${CHAIN_META[destChainId].name} via Across. Fees paid in USDC on Arbitrum.`}
       stepRef={stepRef}
     >
       <StepIndicator

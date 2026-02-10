@@ -17,8 +17,10 @@ export async function grantDepositV3Permission(params: {
   const sessionDetails = await sessionMeeClient.grantPermissionTypedDataSign({
     redeemer: sessionSignerAddress,
     actions,
-    sponsored: true,
-    
+    feeToken: {
+      address: USDC[feeChainId],
+      chainId: feeChainId,
+    },
   });
 
   return sessionDetails;
