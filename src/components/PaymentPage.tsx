@@ -3,7 +3,7 @@ import QRCode from "react-qr-code";
 import { ArrowLeftRight, Copy, Check, ExternalLink } from "lucide-react";
 import { CHAIN_META } from "../constants";
 import { SUPPORTED_CHAINS, TOKEN_SYMBOLS } from "../config";
-import { shortAddr } from "../utils";
+
 
 interface PaymentPageProps {
   address: string;

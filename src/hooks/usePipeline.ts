@@ -56,7 +56,7 @@ export function usePipeline() {
   const { signAuthorization } = useSign7702Authorization();
 
   // ─── Core state ───────────────────────────────────────────────────
-  const [nexusAccount, setNexusAccount] =
+  const [, setNexusAccount] =
     useState<MultichainSmartAccount | null>(null);
   const [authorization, setAuthorization] =
     useState<SignAuthorizationReturnType | null>(null);
@@ -81,7 +81,7 @@ export function usePipeline() {
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
 
   // ─── Destination chain ────────────────────────────────────────────
-  const [destChainId, setDestChainId] = useState(base.id);
+  const [destChainId, setDestChainId] = useState<number>(base.id);
   const [destConfirmed, setDestConfirmed] = useState(false);
   const [chainDropdownOpen, setChainDropdownOpen] = useState(false);
   const chainDropdownRef = useRef<HTMLDivElement>(null);

@@ -69,10 +69,12 @@ export function useBalanceWatcher(
       chainId: number;
       tokenSymbol: string;
       tokenAddress: Address;
-      client: ReturnType<typeof createPublicClient>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      client: any;
     }[] = [];
 
-    const clientCache: Record<number, ReturnType<typeof createPublicClient>> = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const clientCache: Record<number, any> = {};
 
     for (const chainId of watchedChainIds) {
       const chain = chainById[chainId];
