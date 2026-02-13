@@ -17,7 +17,6 @@ export function buildDepositV3Actions(chainIds: number[]) {
   const approveSelector = toFunctionSelector(
     getAbiItem({ abi: erc20Abi, name: "approve" })
   );
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const actions: any[] = [];
 

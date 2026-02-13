@@ -1,5 +1,27 @@
-import { base, optimism, polygon, arbitrum } from "viem/chains";
+import { base, optimism, polygon, arbitrum, mainnet, bsc } from "viem/chains";
+import { http, type Chain, type Transport } from "viem";
 import type { Address } from "viem";
+
+/**
+ * Map chain IDs → RPC URLs from env vars.
+ * IMPORTANT: Next.js only inlines NEXT_PUBLIC_* env vars when referenced as
+ * literal `process.env.NEXT_PUBLIC_X` expressions — dynamic bracket access
+ * (e.g. `process.env[key]`) is NOT replaced at build time.  So we must
+ * reference each variable explicitly here.
+ */
+const RPC_URLS: Record<number, string | undefined> = {
+  [base.id]: process.env.NEXT_PUBLIC_RPC_BASE,
+  [mainnet.id]: process.env.NEXT_PUBLIC_RPC_ETHEREUM,
+  [arbitrum.id]: process.env.NEXT_PUBLIC_RPC_ARBITRUM,
+  [optimism.id]: process.env.NEXT_PUBLIC_RPC_OPTIMISM,
+  [bsc.id]: process.env.NEXT_PUBLIC_RPC_BNB,
+  [polygon.id]: process.env.NEXT_PUBLIC_RPC_POLYGON,
+};
+
+/** Returns the appropriate transport for a chain, using env-var RPC URLs */
+export function getTransport(chain: Chain): Transport {
+  return http(RPC_URLS[chain.id]);
+}
 
 // ─── Biconomy ────────────────────────────────────────────────────────
 export const NEXUS_SINGLETON =
@@ -54,10 +76,15 @@ export const TOKEN_SYMBOLS = Object.keys(SUPPORTED_TOKENS) as string[];
 // ─── Session Version ─────────────────────────────────────────────────
 // Bump this whenever the session permission scope changes (e.g. new tokens)
 // so that existing stored sessions are invalidated and users must re-enable.
-export const SESSION_VERSION = 2;
+export const SESSION_VERSION = 3;
 
 // ─── Biconomy API Key (for MEE service authentication) ──────────────
-export const BICONOMY_API_KEY = import.meta.env.VITE_BICONOMY_API_KEY as string;
+export const BICONOMY_API_KEY =
+  // Client-side (NEXT_PUBLIC_ prefix) or server-side env var
+  (typeof window !== "undefined"
+    ? process.env.NEXT_PUBLIC_BICONOMY_API_KEY
+    : process.env.BICONOMY_API_KEY ?? process.env.NEXT_PUBLIC_BICONOMY_API_KEY
+  ) as string;
 
 // ─── Chains used in this app ─────────────────────────────────────────
 export const SUPPORTED_CHAINS = [optimism, base, polygon, arbitrum] as const;

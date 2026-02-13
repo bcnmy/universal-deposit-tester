@@ -8,6 +8,7 @@ import {
 import { ACROSS_SPOKEPOOL, SUPPORTED_TOKENS, DEPOSIT_V3_ABI } from "../config";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
+import { c, boxLine } from "../lib/log";
 
 export type ExecuteDepositV3Params = {
   /** The session MEE client (with meeSessionActions extended) */
@@ -18,13 +19,13 @@ export type ExecuteDepositV3Params = {
   walletAddress: Address;
   /** The recipient address on the destination chain (defaults to walletAddress) */
   recipient?: Address;
-  /** Source chain ID (where the token leaves from) */
+  /** Source chain ID (where tokens leave from) */
   sourceChainId: number;
-  /** Destination chain ID (where the token arrives) */
+  /** Destination chain ID (where tokens arrive) */
   destinationChainId: number;
   /** Amount to bridge (in token's native decimals) */
   amount: bigint;
-  /** Token symbol (e.g. "USDC", "USDT", "WETH") — defaults to "USDC" */
+  /** Token symbol (e.g. "USDC") — reserved for multi-token support */
   tokenSymbol?: string;
 };
 
@@ -42,24 +43,16 @@ export async function executeDepositV3(
     tokenSymbol = "USDC",
   } = params;
 
+  // Resolve the correct token addresses based on the symbol being bridged
   const token = SUPPORTED_TOKENS[tokenSymbol];
   if (!token) throw new Error(`Unsupported token: ${tokenSymbol}`);
 
-  const inputToken = token.addresses[sourceChainId];
-  const outputToken = token.addresses[destinationChainId];
-  if (!inputToken) throw new Error(`${tokenSymbol} not available on source chain ${sourceChainId}`);
-  if (!outputToken) throw new Error(`${tokenSymbol} not available on destination chain ${destinationChainId}`);
-
-  // Query on-chain state to decide if the session permission has already
-  // been enabled on the source chain.  `checkEnabledPermissions` returns a
-  // mapping of  permissionId → chainId → isEnabled.
-  const enabledMap: Record<string, Record<number, boolean>> =
-    await sessionMeeClient.checkEnabledPermissions(sessionDetails);
-
-  const alreadyEnabled = Object.values(enabledMap).some(
-    (chainMap) => chainMap[sourceChainId] === true,
-  );
-  const mode = alreadyEnabled ? "USE" : "ENABLE_AND_USE";
+  const inputTokenAddress = token.addresses[sourceChainId];
+  const outputTokenAddress = token.addresses[destinationChainId];
+  if (!inputTokenAddress)
+    throw new Error(`${tokenSymbol} not available on chain ${sourceChainId}`);
+  if (!outputTokenAddress)
+    throw new Error(`${tokenSymbol} not available on chain ${destinationChainId}`);
 
   const now = Math.floor(Date.now() / 1000);
 
@@ -77,8 +70,8 @@ export async function executeDepositV3(
     args: [
       walletAddress,                   // depositor
       recipient,                       // recipient
-      inputToken,                      // inputToken  (on source chain)
-      outputToken,                     // outputToken (on destination chain)
+      inputTokenAddress,               // inputToken  (token on source)
+      outputTokenAddress,              // outputToken (token on destination)
       amount,                          // inputAmount
       amount - (amount / 200n),        // outputAmount (0.5% slippage buffer)
       BigInt(destinationChainId),      // destinationChainId
@@ -90,6 +83,25 @@ export async function executeDepositV3(
     ],
   });
 
+  // Check if the session permission is already enabled on the source chain.
+  // If so, use "USE" mode to skip the on-chain enable step (cheaper & faster).
+  const enabledMap: Record<string, Record<number, boolean>> =
+    await sessionMeeClient.checkEnabledPermissions(sessionDetails);
+
+  const alreadyEnabled = Object.values(enabledMap).some(
+    (chainMap) => chainMap[sourceChainId] === true,
+  );
+  const mode = alreadyEnabled ? "USE" : "ENABLE_AND_USE";
+
+  console.log(
+    boxLine(
+      c.dim(`   Session: ${mode}`) +
+        (alreadyEnabled
+          ? c.dim(" (permissions pre-enabled)")
+          : c.dim(" (will enable + use)")),
+    ),
+  );
+
   const result = await sessionMeeClient.usePermission({
     sessionDetails,
     mode,
@@ -97,7 +109,7 @@ export async function executeDepositV3(
       {
         calls: [
           {
-            to: inputToken,
+            to: inputTokenAddress,
             data: approveCalldata,
           },
           {

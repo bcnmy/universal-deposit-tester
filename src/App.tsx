@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { usePipeline } from "./hooks/usePipeline";
 import { TopBar, type AppTab } from "./components/TopBar";

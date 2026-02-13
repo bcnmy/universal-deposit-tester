@@ -1,3 +1,5 @@
+"use client";
+
 import type { Hash } from "viem";
 import { CircleCheck, ExternalLink, Loader2 } from "lucide-react";
 import type { StepStatus } from "../../types";

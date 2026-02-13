@@ -1,3 +1,5 @@
+"use client";
+
 import type { PipelineState } from "../hooks/usePipeline";
 import { ConnectWalletStep } from "./steps/ConnectWalletStep";
 import { SelectDestinationStep } from "./steps/SelectDestinationStep";
@@ -45,6 +47,7 @@ export function Pipeline({ pipeline: p }: PipelineProps) {
             setRecipientAddr={p.setRecipientAddr}
             recipientIsSelf={p.recipientIsSelf}
             setRecipientIsSelf={p.setRecipientIsSelf}
+            walletAddress={p.embeddedWallet?.address}
             stepRef={ref(1)}
           />
 

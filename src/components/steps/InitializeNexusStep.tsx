@@ -1,3 +1,5 @@
+"use client";
+
 import type { StepStatus, Status } from "../../types";
 import { shortAddr } from "../../utils";
 import { StepCard } from "../StepCard";

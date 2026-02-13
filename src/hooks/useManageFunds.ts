@@ -6,7 +6,6 @@ import {
 import {
   erc20Abi,
   createPublicClient,
-  http,
   type Address,
 } from "viem";
 import type { SignAuthorizationReturnType } from "viem/accounts";
@@ -21,6 +20,7 @@ import {
   SUPPORTED_TOKENS,
   TOKEN_SYMBOLS,
   NEXUS_SINGLETON,
+  getTransport,
 } from "../config";
 import { createSessionMeeClient } from "../sessions";
 import { ScheduledExecutionBounds } from "../sessions/getScheduledExecutionBounds";
@@ -99,7 +99,7 @@ export function useManageFunds() {
 
     for (const chain of SUPPORTED_CHAINS) {
       newBalances[chain.id] = {};
-      const client = createPublicClient({ chain, transport: http() });
+      const client = createPublicClient({ chain, transport: getTransport(chain) });
 
       for (const [symbol, config] of Object.entries(SUPPORTED_TOKENS)) {
         const tokenAddr = config.addresses[chain.id];

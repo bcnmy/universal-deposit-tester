@@ -1,3 +1,5 @@
+"use client";
+
 import { Check, ExternalLink, Loader2 } from "lucide-react";
 import type { Hash } from "viem";
 import type { Status } from "../types";

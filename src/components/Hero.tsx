@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useCallback } from "react";
 import { Check, Copy, Share2 } from "lucide-react";
 import { CHAIN_META } from "../constants";

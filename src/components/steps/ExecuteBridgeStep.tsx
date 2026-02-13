@@ -1,3 +1,5 @@
+"use client";
+
 import type { Hash } from "viem";
 import type { StepStatus, Status } from "../../types";
 import { CHAIN_META } from "../../constants";

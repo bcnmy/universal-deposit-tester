@@ -1,3 +1,5 @@
+"use client";
+
 import type { StepStatus, Status } from "../../types";
 import { StepCard } from "../StepCard";
 import { StepIndicator } from "../StepIndicator";

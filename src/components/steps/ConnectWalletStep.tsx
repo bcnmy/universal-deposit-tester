@@ -1,3 +1,5 @@
+"use client";
+
 import { Check, Wallet } from "lucide-react";
 import type { StepStatus } from "../../types";
 import { shortAddr } from "../../utils";

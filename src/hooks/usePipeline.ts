@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   usePrivy,
   useWallets,
@@ -17,7 +17,6 @@ import {
   createSessionMeeClient,
   installSessionModule,
   grantDepositV3Permission,
-  executeDepositV3,
   saveSessionKey,
   loadSessionKey,
   saveSessionDetails,
@@ -25,29 +24,24 @@ import {
   saveListeningConfig,
   loadListeningConfig,
   clearSession,
+  registerSessionOnServer,
+  getServerSessionStatus,
+  reconfigureServerSession,
+  deregisterServerSession,
   type SessionDetails,
 } from "../sessions/index";
 import { NEXUS_SINGLETON, SUPPORTED_CHAINS } from "../config";
 import { isValidAddress, deriveStatus } from "../utils";
-import { useBalanceWatcher, type DetectedDeposit } from "./useBalanceWatcher";
 import type { Status, StepStatus } from "../types";
-
-// ─────────────────────────────────────────────────────────────────────
-//  Transfer record for the listening dashboard log
-// ─────────────────────────────────────────────────────────────────────
-
-export type TransferRecord = {
-  sourceChainId: number;
-  destinationChainId: number;
-  tokenSymbol: string;
-  amount: bigint;
-  txHash: string;
-  timestamp: number;
-};
 
 // ─────────────────────────────────────────────────────────────────────
 //  usePipeline — all pipeline state, handlers, auto-advance effects,
 //  listening mode, and derived step statuses in one hook.
+//
+//  NOTE: All balance monitoring and bridge execution is server-side
+//  only (via the cron job at /api/cron/poll). The frontend handles
+//  setup (connect → sign → install → grant → register) and then shows
+//  server-side monitoring status.
 // ─────────────────────────────────────────────────────────────────────
 
 export function usePipeline() {
@@ -76,9 +70,9 @@ export function usePipeline() {
 
   // ─── Listening mode ───────────────────────────────────────────────
   const [isListening, setIsListening] = useState(false);
-  const [bridgeStatus, setBridgeStatus] = useState<Status>("idle");
-  const [bridgingChainId, setBridgingChainId] = useState<number | null>(null);
-  const [transfers, setTransfers] = useState<TransferRecord[]>([]);
+
+  // ─── Server registration ───────────────────────────────────────────
+  const [serverRegistered, setServerRegistered] = useState(false);
 
   // ─── Destination chain ────────────────────────────────────────────
   const [destChainId, setDestChainId] = useState<number>(base.id);
@@ -103,7 +97,6 @@ export function usePipeline() {
   const sessionMeeClientRef = useRef<any>(null);
   const sessionModuleRef = useRef<any>(null);
   const sessionSignerRef = useRef<PrivateKeyAccount | null>(null);
-  const sessionSignerMeeClientRef = useRef<any>(null);
 
   // ─── Pipeline scroll refs ─────────────────────────────────────────
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -117,28 +110,6 @@ export function usePipeline() {
     : isValidAddress(recipientAddr)
       ? (recipientAddr as `0x${string}`)
       : null;
-
-  // ─── Derived: watched chain IDs (all except destination) ──────────
-  const watchedChainIds = useMemo(
-    () => SUPPORTED_CHAINS.filter((c) => c.id !== destChainId).map((c) => c.id),
-    [destChainId],
-  );
-
-  // ═══════════════════════════════════════════════════════════════════
-  //  Balance watcher — polls USDC balances on watched chains
-  // ═══════════════════════════════════════════════════════════════════
-
-  const {
-    balances,
-    pendingDeposit,
-    lastChecked,
-    clearDeposit,
-    setBridging,
-  } = useBalanceWatcher(
-    embeddedWallet?.address as `0x${string}` | undefined,
-    watchedChainIds,
-    isListening,
-  );
 
   // ═══════════════════════════════════════════════════════════════════
   //  Session restore (persisted session key + details + listening cfg)
@@ -171,6 +142,28 @@ export function usePipeline() {
       setRecipientAddr(savedConfig.recipientAddr);
       setIsListening(true);
     }
+
+    // Check server registration status.
+    // If the server no longer has a session (e.g. deleted via admin panel)
+    // but local storage still does, clear local state so the user sees
+    // the setup screen instead of a stuck "Waiting for Server Registration".
+    getServerSessionStatus(addr)
+      .then((status) => {
+        const registered = status.registered && !!status.active;
+        setServerRegistered(registered);
+
+        if (!registered && savedConfig && savedDetails && savedKey) {
+          // Local thinks we're listening but server disagrees — reset.
+          clearSession(addr);
+          setIsListening(false);
+          setSessionDetails(null);
+          setSessionSignerAddress(null);
+          sessionSignerRef.current = null;
+          setDestConfirmed(false);
+          setGrantStatus("idle");
+        }
+      })
+      .catch(() => {});
   }, [embeddedWallet]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════
@@ -324,6 +317,12 @@ export function usePipeline() {
     //    don't have to re-install the sessions module.
     if (embeddedWallet) {
       clearSession(embeddedWallet.address, { keepKey: true });
+
+      // Pause server-side monitoring while reconfiguring
+      reconfigureServerSession(embeddedWallet.address, { active: false }).catch(
+        () => {},
+      );
+      setServerRegistered(false);
     }
 
     // 3. Reset in-memory session details
@@ -335,25 +334,156 @@ export function usePipeline() {
     // 5. Re-open destination selection so the user can change chain/recipient
     setDestConfirmed(false);
 
-    // 6. Clear the session-signer MEE client so it's re-created fresh
-    sessionSignerMeeClientRef.current = null;
-
-    // 7. Reset bridge / transfer UI state
-    setBridgeStatus("idle");
-    setBridgingChainId(null);
-    setTransfers([]);
-
-    // 8. Clear any lingering error
+    // 6. Clear any lingering error
     setError(null);
   }, [embeddedWallet]);
 
   // ═══════════════════════════════════════════════════════════════════
-  //  Transition to listening mode after setup completes
+  //  Delete Session — wipe ALL session data from the server and local
+  //  storage.  Monitoring stops immediately.  The user can re-enable
+  //  later, but a brand-new session will be signed (since the key is
+  //  deleted).
+  // ═══════════════════════════════════════════════════════════════════
+
+  const [deleteStatus, setDeleteStatus] = useState<"idle" | "loading" | "done">("idle");
+
+  const handleDeleteSession = useCallback(async () => {
+    if (!embeddedWallet) return;
+
+    // Require explicit user confirmation
+    const confirmed = window.confirm(
+      "Delete all session data?\n\n" +
+      "This will stop server-side monitoring and erase your session from the server. " +
+      "You can set up a new session afterwards, but you'll need to go through the full setup again.",
+    );
+    if (!confirmed) return;
+
+    setDeleteStatus("loading");
+
+    try {
+      // 1. Delete session from the server
+      await deregisterServerSession(embeddedWallet.address);
+    } catch (err) {
+      console.error("[delete] Failed to deregister from server:", err);
+      // Continue with local cleanup even if server call fails
+    }
+
+    // 2. Clear ALL local data (key + details + listening config)
+    clearSession(embeddedWallet.address);
+
+    // 3. Exit listening mode
+    setIsListening(false);
+    setServerRegistered(false);
+
+    // 4. Reset all in-memory state
+    setSessionDetails(null);
+    setSessionSignerAddress(null);
+    sessionSignerRef.current = null;
+    sessionModuleRef.current = null;
+    meeClientRef.current = null;
+    sessionMeeClientRef.current = null;
+    setAuthorization(null);
+
+    // 5. Reset all step statuses so the pipeline starts fresh
+    setAuthStatus("idle");
+    setSetupStatus("idle");
+    setInstallStatus("idle");
+    setGrantStatus("idle");
+    setInstallTxHash(null);
+
+    // 6. Re-open destination selection
+    setDestConfirmed(false);
+
+    // 7. Clear any lingering error
+    setError(null);
+
+    setDeleteStatus("done");
+
+    // Reset the "done" flag after a moment
+    setTimeout(() => setDeleteStatus("idle"), 2000);
+  }, [embeddedWallet]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  Full Reset & Re-setup — nuclear option: wipes everything (server
+  //  + local), then automatically re-runs the entire pipeline with the
+  //  current destination/recipient settings.  Useful when the on-chain
+  //  state is out of sync (e.g. stale 7702 delegation or corrupted
+  //  session details).
+  // ═══════════════════════════════════════════════════════════════════
+
+  const [resetStatus, setResetStatus] = useState<"idle" | "loading" | "done">("idle");
+
+  const handleFullReset = useCallback(async () => {
+    if (!embeddedWallet) return;
+
+    const confirmed = window.confirm(
+      "Full reset & re-setup?\n\n" +
+      "This will delete all session data (server + local), generate a new " +
+      "session key, re-sign the 7702 authorization, re-install the sessions " +
+      "module, and re-grant permissions.\n\n" +
+      "The current destination and recipient settings will be preserved.",
+    );
+    if (!confirmed) return;
+
+    setResetStatus("loading");
+
+    // Remember current config before wiping
+    const savedDest = destChainId;
+    const savedRecipientIsSelf = recipientIsSelf;
+    const savedRecipientAddr = recipientAddr;
+
+    // 1. Deregister from server
+    try {
+      await deregisterServerSession(embeddedWallet.address);
+    } catch (err) {
+      console.error("[full-reset] Failed to deregister from server:", err);
+    }
+
+    // 2. Clear ALL local data (key + details + listening config)
+    clearSession(embeddedWallet.address);
+
+    // 3. Exit listening mode
+    setIsListening(false);
+    setServerRegistered(false);
+
+    // 4. Reset all in-memory state
+    setSessionDetails(null);
+    setSessionSignerAddress(null);
+    sessionSignerRef.current = null;
+    sessionModuleRef.current = null;
+    meeClientRef.current = null;
+    sessionMeeClientRef.current = null;
+    setAuthorization(null);
+
+    // 5. Reset all step statuses
+    setAuthStatus("idle");
+    setSetupStatus("idle");
+    setInstallStatus("idle");
+    setGrantStatus("idle");
+    setInstallTxHash(null);
+    setError(null);
+
+    // 6. Restore destination settings and keep destConfirmed=true
+    //    so the auto-advance effects immediately re-trigger the pipeline
+    //    (sign auth → setup → install → grant → listening).
+    setDestChainId(savedDest);
+    setRecipientIsSelf(savedRecipientIsSelf);
+    setRecipientAddr(savedRecipientAddr);
+    setDestConfirmed(true);
+
+    setResetStatus("done");
+    setTimeout(() => setResetStatus("idle"), 2000);
+  }, [embeddedWallet, destChainId, recipientIsSelf, recipientAddr]);
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  Transition to listening mode after setup completes.
+  //  Also register the session on the server so the background cron
+  //  can keep bridging even when the browser tab is closed.
   // ═══════════════════════════════════════════════════════════════════
 
   useEffect(() => {
-    if (grantStatus === "success" && sessionDetails && !isListening) {
-      // Persist the listening configuration
+    if (grantStatus === "success" && sessionDetails && destConfirmed && !isListening) {
+      // Persist locally
       if (embeddedWallet) {
         saveListeningConfig(embeddedWallet.address, {
           destChainId,
@@ -361,6 +491,28 @@ export function usePipeline() {
           recipientAddr,
         });
       }
+
+      // Register on the server (fire-and-forget — don't block the UI)
+      if (embeddedWallet && sessionSignerRef.current) {
+        const sessionKey = loadSessionKey(embeddedWallet.address);
+        if (sessionKey) {
+          registerSessionOnServer({
+            walletAddress: embeddedWallet.address,
+            sessionPrivateKey: sessionKey,
+            sessionSignerAddress: sessionSignerRef.current.address,
+            sessionDetails,
+            listeningConfig: { destChainId, recipientIsSelf, recipientAddr },
+          })
+            .then(() => {
+              setServerRegistered(true);
+              console.log("[server] Session registered for background monitoring");
+            })
+            .catch((err) =>
+              console.error("[server] Failed to register session:", err),
+            );
+        }
+      }
+
       // Small delay so the user can see step 7 complete
       const timer = setTimeout(() => setIsListening(true), 800);
       return () => clearTimeout(timer);
@@ -368,92 +520,8 @@ export function usePipeline() {
   }, [grantStatus, sessionDetails]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════
-  //  Bridge handler — triggered by balance watcher detecting a deposit
-  // ═══════════════════════════════════════════════════════════════════
-
-  const handleBridgeDeposit = useCallback(
-    async (deposit: DetectedDeposit) => {
-      if (
-        !sessionSignerRef.current ||
-        !sessionDetails ||
-        !embeddedWallet ||
-        bridgeStatus === "loading"
-      )
-        return;
-
-      setBridging(true);
-      setBridgeStatus("loading");
-      setBridgingChainId(deposit.chainId);
-      setError(null);
-
-      try {
-        // Lazy-create the session-signer MEE client
-        if (!sessionSignerMeeClientRef.current) {
-          const { sessionMeeClient: ssClient } = await createSessionMeeClient(
-            sessionSignerRef.current,
-            embeddedWallet.address as `0x${string}`,
-          );
-          sessionSignerMeeClientRef.current = ssClient;
-        }
-
-        const result = await executeDepositV3({
-          sessionMeeClient: sessionSignerMeeClientRef.current,
-          sessionDetails,
-          walletAddress: embeddedWallet.address as `0x${string}`,
-          recipient:
-            effectiveRecipient ||
-            (embeddedWallet.address as `0x${string}`),
-          sourceChainId: deposit.chainId,
-          destinationChainId: destChainId,
-          amount: deposit.amount,
-          tokenSymbol: deposit.tokenSymbol,
-        });
-
-        setTransfers((prev) => [
-          {
-            sourceChainId: deposit.chainId,
-            destinationChainId: destChainId,
-            tokenSymbol: deposit.tokenSymbol,
-            amount: deposit.amount,
-            txHash: result.hash,
-            timestamp: Date.now(),
-          },
-          ...prev,
-        ]);
-
-        setBridgeStatus("success");
-        console.log("Supertransaction hash:", result.hash);
-        console.log(
-          "MeeScan:",
-          `https://meescan.biconomy.io/details/${result.hash}`,
-        );
-      } catch (err) {
-        console.error("Failed to bridge deposit:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to bridge deposit",
-        );
-        setBridgeStatus("error");
-      } finally {
-        setBridgingChainId(null);
-        setBridging(false);
-        clearDeposit();
-        // Reset bridge status after a delay so UI can show result
-        setTimeout(() => setBridgeStatus("idle"), 5000);
-      }
-    },
-    [sessionDetails, embeddedWallet, destChainId, effectiveRecipient, bridgeStatus, setBridging, clearDeposit],
-  );
-
-  // ─── Auto-trigger bridge when deposit detected ─────────────────────
-  useEffect(() => {
-    if (pendingDeposit && isListening && bridgeStatus !== "loading") {
-      handleBridgeDeposit(pendingDeposit);
-    }
-  }, [pendingDeposit, isListening]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ═══════════════════════════════════════════════════════════════════
   //  Auto-advance — each setup step triggers the next when it succeeds
-  //  (Steps 3–7 only; no auto-execute bridge)
+  //  (Steps 3–7 only)
   // ═══════════════════════════════════════════════════════════════════
 
   useEffect(() => {
@@ -474,10 +542,10 @@ export function usePipeline() {
   }, [setupStatus, authorization, installStatus]);
 
   useEffect(() => {
-    if (installStatus === "success" && grantStatus === "idle")
+    if (destConfirmed && installStatus === "success" && grantStatus === "idle")
       handleGrantPermission();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [installStatus, grantStatus]);
+  }, [destConfirmed, installStatus, grantStatus]);
 
   // ─── Chain dropdown: outside click ────────────────────────────────
   useEffect(() => {
@@ -507,7 +575,7 @@ export function usePipeline() {
   }, [chainDropdownOpen]);
 
   // ═══════════════════════════════════════════════════════════════════
-  //  Step status derivation (7 setup steps)
+  //  Step status derivation (6 setup steps)
   // ═══════════════════════════════════════════════════════════════════
 
   const s1 = deriveStatus(true, "idle", true, authenticated);
@@ -621,15 +689,20 @@ export function usePipeline() {
 
     // ── Listening mode ──────────────────────────────────────────────
     isListening,
-    balances,
-    watchedChainIds,
-    bridgeStatus,
-    bridgingChainId,
-    transfers,
-    lastChecked,
 
     // ── Reconfigure ─────────────────────────────────────────────────
     handleReconfigure,
+
+    // ── Delete session ──────────────────────────────────────────────
+    handleDeleteSession,
+    deleteStatus,
+
+    // ── Full reset & re-setup ────────────────────────────────────────
+    handleFullReset,
+    resetStatus,
+
+    // ── Server-side monitoring status ────────────────────────────────
+    serverRegistered,
   };
 }
 

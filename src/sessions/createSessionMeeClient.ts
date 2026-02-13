@@ -5,8 +5,8 @@ import {
   getMEEVersion,
   MEEVersion,
 } from "@biconomy/abstractjs";
-import { http, type Address } from "viem";
-import { SUPPORTED_CHAINS, BICONOMY_API_KEY } from "../config";
+import { type Address } from "viem";
+import { SUPPORTED_CHAINS, BICONOMY_API_KEY, getTransport } from "../config";
 
 /**
  * Creates a MEE client + session-extended MEE client for the given signer.
@@ -27,7 +27,7 @@ export async function createSessionMeeClient(
     signer,
     chainConfigurations: SUPPORTED_CHAINS.map((chain) => ({
       chain,
-      transport: http(),
+      transport: getTransport(chain),
       version: getMEEVersion(MEEVersion.V2_1_0),
       accountAddress: walletAddress,
     })),

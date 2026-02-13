@@ -1,3 +1,5 @@
+"use client";
+
 import { Loader2, Check, Shield } from "lucide-react";
 import type { Status } from "../../types";
 

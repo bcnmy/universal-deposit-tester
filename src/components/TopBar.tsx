@@ -1,4 +1,6 @@
-import { ArrowLeftRight, Check, Copy, LogOut } from "lucide-react";
+"use client";
+
+import { ArrowLeftRight, Check, Copy, LayoutDashboard, LogOut, Wallet } from "lucide-react";
 import { shortAddr } from "../utils";
 
 export type AppTab = "overview" | "manage";
@@ -37,12 +39,14 @@ export function TopBar({
             className={`topbar-tab${activeTab === "overview" ? " topbar-tab--active" : ""}`}
             onClick={() => onTabChange("overview")}
           >
+            <LayoutDashboard size={13} />
             Overview
           </button>
           <button
             className={`topbar-tab${activeTab === "manage" ? " topbar-tab--active" : ""}`}
             onClick={() => onTabChange("manage")}
           >
+            <Wallet size={13} />
             Manage Funds
           </button>
         </div>

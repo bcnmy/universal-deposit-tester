@@ -1,3 +1,5 @@
+"use client";
+
 import type { RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import type { StepStatus } from "../../types";
@@ -20,6 +22,7 @@ interface Props {
   setRecipientAddr: (v: string) => void;
   recipientIsSelf: boolean;
   setRecipientIsSelf: (v: boolean) => void;
+  walletAddress?: string;
   stepRef: (el: HTMLDivElement | null) => void;
 }
 
@@ -38,6 +41,7 @@ export function SelectDestinationStep({
   setRecipientAddr,
   recipientIsSelf,
   setRecipientIsSelf,
+  walletAddress,
   stepRef,
 }: Props) {
   return (
@@ -45,7 +49,7 @@ export function SelectDestinationStep({
       index={1}
       status={status}
       title="Select Destination"
-      description="Choose which chain and recipient to receive your USDC. Funds are bridged automatically via Across Protocol."
+      description="Choose which chain and recipient to move the tokens to after receiving them on this address."
       stepRef={stepRef}
     >
       {!destConfirmed ? (
@@ -63,12 +67,14 @@ export function SelectDestinationStep({
           setRecipientAddr={setRecipientAddr}
           recipientIsSelf={recipientIsSelf}
           setRecipientIsSelf={setRecipientIsSelf}
+          walletAddress={walletAddress}
         />
       ) : (
         <DestinationConfirmed
           destChainId={destChainId}
           recipientIsSelf={recipientIsSelf}
           recipientAddr={recipientAddr}
+          walletAddress={walletAddress}
         />
       )}
     </StepCard>
@@ -91,7 +97,12 @@ function DestinationForm({
   setRecipientAddr,
   recipientIsSelf,
   setRecipientIsSelf,
+  walletAddress,
 }: Omit<Props, "destConfirmed" | "stepRef">) {
+  const selfPlaceholder = walletAddress
+    ? `Self (${shortAddr(walletAddress)})`
+    : "Self";
+
   return (
     <>
       <div className="chain-step-action">
@@ -148,40 +159,29 @@ function DestinationForm({
             </div>
           )}
         </div>
-
-        {/* Recipient toggle */}
-        <label className="recipient-toggle">
-          <input
-            type="checkbox"
-            checked={!recipientIsSelf}
-            onChange={(e) => {
-              setRecipientIsSelf(!e.target.checked);
-              if (!e.target.checked) setRecipientAddr("");
-            }}
-          />
-          Send to different address
-        </label>
       </div>
 
-      {/* Custom recipient input */}
-      {!recipientIsSelf && (
-        <div className="recipient-input-wrap">
-          <input
-            type="text"
-            className={`recipient-input${
-              recipientAddr && !isValidAddress(recipientAddr)
-                ? " recipient-input--invalid"
-                : ""
-            }`}
-            placeholder="0x… recipient address"
-            value={recipientAddr}
-            onChange={(e) => setRecipientAddr(e.target.value.trim())}
-            disabled={status === "pending"}
-            spellCheck={false}
-            autoComplete="off"
-          />
-        </div>
-      )}
+      {/* Recipient input — always visible */}
+      <div className="recipient-input-wrap">
+        <input
+          type="text"
+          className={`recipient-input${
+            recipientAddr && !isValidAddress(recipientAddr)
+              ? " recipient-input--invalid"
+              : ""
+          }`}
+          placeholder={selfPlaceholder}
+          value={recipientAddr}
+          onChange={(e) => {
+            const val = e.target.value.trim();
+            setRecipientAddr(val);
+            setRecipientIsSelf(val === "");
+          }}
+          disabled={status === "pending"}
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </div>
 
       {/* Continue */}
       <div className="btn-continue-wrap">
@@ -204,10 +204,12 @@ function DestinationConfirmed({
   destChainId,
   recipientIsSelf,
   recipientAddr,
+  walletAddress,
 }: {
   destChainId: number;
   recipientIsSelf: boolean;
   recipientAddr: string;
+  walletAddress?: string;
 }) {
   return (
     <div className="dest-confirmed-details">
@@ -230,7 +232,9 @@ function DestinationConfirmed({
           Recipient
         </span>
         <span className="done-value done-value--recipient">
-          {recipientIsSelf ? "Self" : shortAddr(recipientAddr)}
+          {recipientIsSelf
+            ? `Self (${shortAddr(walletAddress || "")})`
+            : shortAddr(recipientAddr)}
         </span>
       </div>
     </div>

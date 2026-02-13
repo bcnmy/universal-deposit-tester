@@ -1,35 +1,32 @@
 {
-  "name": "test-session-2",
+  "name": "nexus-bridge",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "0.1.0",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "dev": "next dev",
+    "dev:cron": "node scripts/local-cron.mjs 60",
+    "dev:full": "next dev & node scripts/local-cron.mjs 60 ; wait",
+    "build": "next build",
+    "start": "next start",
+    "start:cron": "node scripts/local-cron.mjs 60",
+    "start:full": "next start & node scripts/local-cron.mjs 60 ; wait",
+    "lint": "next lint"
   },
   "dependencies": {
     "@biconomy/abstractjs": "^1.1.21",
     "@privy-io/react-auth": "^3.13.1",
+    "@upstash/redis": "^1.34.3",
     "lucide-react": "^0.563.0",
+    "next": "^15.3.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-qr-code": "^2.0.18",
     "viem": "^2.45.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.1",
-    "eslint": "^9.39.1",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-react-refresh": "^0.4.24",
-    "globals": "^16.5.0",
-    "typescript": "~5.9.3",
-    "typescript-eslint": "^8.48.0",
-    "vite": "^7.3.1"
+    "typescript": "~5.9.3"
   }
 }

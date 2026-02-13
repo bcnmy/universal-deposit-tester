@@ -1,20 +1,26 @@
 /**
- * Thin localStorage wrapper for session-signer data.
+ * Session storage — dual layer.
  *
- * Keys are scoped per wallet address so multiple wallets on the same
- * browser don't collide.
+ * **Local (localStorage)**:  fast client cache for the active tab so UI
+ * resumes instantly on refresh.  Same as before.
  *
- * Session details are versioned — when SESSION_VERSION is bumped
- * (e.g. because we added new token permissions) any previously stored
- * session is treated as stale and loadSessionDetails returns null,
- * forcing the user to re-grant permissions.
+ * **Server (API calls)**:  the source of truth.  When the user finishes
+ * the setup pipeline the client calls `registerSessionOnServer()` which
+ * POSTs the session key + details + config to the backend.  From that
+ * point the server polls and bridges even when the tab is closed.
  *
- * Later the private key will move to a backend — swap out this module
- * when that happens.
+ * Local helpers are still exported (and used by usePipeline for fast
+ * hydration), but the server registration is what enables background
+ * execution.
  */
 
 import type { SessionDetails } from "./types";
 import { SESSION_VERSION } from "../config";
+import { serialize, deserialize } from "../lib/bigintJson";
+
+// ═══════════════════════════════════════════════════════════════════════
+//  LOCAL (localStorage) — fast client-side cache
+// ═══════════════════════════════════════════════════════════════════════
 
 const KEY_PREFIX = "nexus_session";
 
@@ -53,12 +59,7 @@ export function saveSessionDetails(
     version: SESSION_VERSION,
     details,
   };
-  localStorage.setItem(
-    keyFor(walletAddress, "details"),
-    JSON.stringify(envelope, (_k, v) =>
-      typeof v === "bigint" ? `__bigint:${v.toString()}` : v,
-    ),
-  );
+  localStorage.setItem(keyFor(walletAddress, "details"), serialize(envelope));
 }
 
 export function loadSessionDetails(
@@ -67,18 +68,10 @@ export function loadSessionDetails(
   const raw = localStorage.getItem(keyFor(walletAddress, "details"));
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw, (_k, v) => {
-      if (typeof v === "string" && v.startsWith("__bigint:")) {
-        return BigInt(v.slice("__bigint:".length));
-      }
-      return v;
-    });
+    const parsed = deserialize<StoredSessionEnvelope>(raw);
 
-    // ── Version gate ────────────────────────────────────────────────
-    // New format: { version, details }
     if (parsed && typeof parsed === "object" && "version" in parsed) {
       if (parsed.version !== SESSION_VERSION) {
-        // Stale session — clear it and force re-grant
         localStorage.removeItem(keyFor(walletAddress, "details"));
         localStorage.removeItem(keyFor(walletAddress, "listening"));
         return null;
@@ -86,7 +79,6 @@ export function loadSessionDetails(
       return parsed.details as SessionDetails;
     }
 
-    // Old format (pre-versioning) — treat as stale
     localStorage.removeItem(keyFor(walletAddress, "details"));
     localStorage.removeItem(keyFor(walletAddress, "listening"));
     return null;
@@ -125,9 +117,7 @@ export function loadListeningConfig(
   }
 }
 
-// ── Clear session data for a wallet ─────────────────────────────────
-//    Pass `keepKey: true` to preserve the session signer private key
-//    (useful when reconfiguring — no need to re-install the module).
+// ── Clear local session data ─────────────────────────────────────────
 
 export function clearSession(
   walletAddress: string,
@@ -140,4 +130,79 @@ export function clearSession(
   localStorage.removeItem(keyFor(walletAddress, "listening"));
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+//  SERVER — register / check / reconfigure / deregister
+// ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Register a wallet for persistent server-side monitoring.
+ * Called after the full pipeline completes (install + grant + config).
+ */
+export async function registerSessionOnServer(params: {
+  walletAddress: string;
+  sessionPrivateKey: string;
+  sessionSignerAddress: string;
+  sessionDetails: SessionDetails;
+  listeningConfig: ListeningConfig;
+}): Promise<void> {
+  const res = await fetch("/api/sessions/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: serialize({
+      ...params,
+      sessionVersion: SESSION_VERSION,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Server registration failed (${res.status})`);
+  }
+}
+
+/** Check whether a wallet is registered on the server. */
+export async function getServerSessionStatus(walletAddress: string): Promise<{
+  registered: boolean;
+  active?: boolean;
+  lastPollAt?: string | null;
+}> {
+  const res = await fetch(
+    `/api/sessions/${encodeURIComponent(walletAddress.toLowerCase())}`,
+  );
+  if (!res.ok) return { registered: false };
+  return res.json();
+}
+
+/** Reconfigure the server-side listening config. */
+export async function reconfigureServerSession(
+  walletAddress: string,
+  patch: {
+    listeningConfig?: ListeningConfig;
+    sessionDetails?: SessionDetails;
+    active?: boolean;
+  },
+): Promise<void> {
+  const res = await fetch(
+    `/api/sessions/${encodeURIComponent(walletAddress.toLowerCase())}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: serialize(patch),
+    },
+  );
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Reconfigure failed (${res.status})`);
+  }
+}
+
+/** Deregister — stop server-side monitoring for a wallet. */
+export async function deregisterServerSession(
+  walletAddress: string,
+): Promise<void> {
+  await fetch(
+    `/api/sessions/${encodeURIComponent(walletAddress.toLowerCase())}`,
+    { method: "DELETE" },
+  );
+}

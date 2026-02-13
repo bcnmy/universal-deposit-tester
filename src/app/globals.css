@@ -1,0 +1,4 @@
+/* Thin wrapper — the actual styles live in the existing files.
+   This file is imported by layout.tsx and only adds the Google Fonts
+   that were previously loaded via <link> in index.html. */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
