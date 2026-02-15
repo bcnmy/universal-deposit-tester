@@ -5,7 +5,7 @@ import {
   useSign7702Authorization,
 } from "@privy-io/react-auth";
 import { type Hash } from "viem";
-import { arbitrum, base } from "viem/chains";
+import { base } from "viem/chains";
 import type { MultichainSmartAccount } from "@biconomy/abstractjs";
 import type {
   PrivateKeyAccount,
@@ -19,11 +19,7 @@ import {
   grantDepositV3Permission,
   saveSessionKey,
   loadSessionKey,
-  saveSessionDetails,
-  loadSessionDetails,
-  saveListeningConfig,
-  loadListeningConfig,
-  clearSession,
+  clearSessionKey,
   registerSessionOnServer,
   getServerSessionStatus,
   reconfigureServerSession,
@@ -52,8 +48,8 @@ export function usePipeline() {
   // ─── Core state ───────────────────────────────────────────────────
   const [, setNexusAccount] =
     useState<MultichainSmartAccount | null>(null);
-  const [authorization, setAuthorization] =
-    useState<SignAuthorizationReturnType | null>(null);
+  const [authorizations, setAuthorizations] =
+    useState<SignAuthorizationReturnType[] | null>(null);
   const [sessionDetails, setSessionDetails] =
     useState<SessionDetails | null>(null);
   const [sessionSignerAddress, setSessionSignerAddress] = useState<
@@ -111,15 +107,29 @@ export function usePipeline() {
       ? (recipientAddr as `0x${string}`)
       : null;
 
+  // ─── Session check loading state ─────────────────────────────────
+  const [checkingSession, setCheckingSession] = useState(false);
+
   // ═══════════════════════════════════════════════════════════════════
-  //  Session restore (persisted session key + details + listening cfg)
+  //  Session restore — server is the single source of truth.
+  //
+  //  When the wallet connects we query the backend.  If it has an
+  //  active session we restore the config from the server response
+  //  and jump straight to listening mode.  If not, the user sees the
+  //  setup pipeline.
+  //
+  //  The only localStorage data we touch is the session private key
+  //  (used to reuse the same signer if the user refreshes mid-setup).
   // ═══════════════════════════════════════════════════════════════════
 
   useEffect(() => {
     if (!embeddedWallet) return;
     const addr = embeddedWallet.address;
 
-    // Restore session signer
+    let cancelled = false;
+    setCheckingSession(true);
+
+    // ── 1. Hydrate session signer from localStorage (for mid-pipeline resume) ──
     const savedKey = loadSessionKey(addr);
     if (savedKey && !sessionSignerRef.current) {
       const { sessionSigner } = createSessionSigner(savedKey);
@@ -127,43 +137,44 @@ export function usePipeline() {
       setSessionSignerAddress(sessionSigner.address);
     }
 
-    // Restore session details
-    const savedDetails = loadSessionDetails(addr);
-    if (savedDetails && !sessionDetails) {
-      setSessionDetails(savedDetails);
-    }
-
-    // Restore listening config → jump straight to listening mode
-    const savedConfig = loadListeningConfig(addr);
-    if (savedConfig && savedDetails && savedKey) {
-      setDestChainId(savedConfig.destChainId);
-      setDestConfirmed(true);
-      setRecipientIsSelf(savedConfig.recipientIsSelf);
-      setRecipientAddr(savedConfig.recipientAddr);
-      setIsListening(true);
-    }
-
-    // Check server registration status.
-    // If the server no longer has a session (e.g. deleted via admin panel)
-    // but local storage still does, clear local state so the user sees
-    // the setup screen instead of a stuck "Waiting for Server Registration".
+    // ── 2. Query the server (source of truth) ─────────────────────
     getServerSessionStatus(addr)
       .then((status) => {
+        if (cancelled) return;
+
         const registered = status.registered && !!status.active;
         setServerRegistered(registered);
 
-        if (!registered && savedConfig && savedDetails && savedKey) {
-          // Local thinks we're listening but server disagrees — reset.
-          clearSession(addr);
-          setIsListening(false);
-          setSessionDetails(null);
-          setSessionSignerAddress(null);
-          sessionSignerRef.current = null;
-          setDestConfirmed(false);
-          setGrantStatus("idle");
+        if (registered && status.listeningConfig) {
+          // Server has an active session — restore from server data
+          // and jump straight to the listening dashboard.
+          const cfg = status.listeningConfig;
+
+          setDestChainId(cfg.destChainId);
+          setDestConfirmed(true);
+          setRecipientIsSelf(cfg.recipientIsSelf);
+          setRecipientAddr(cfg.recipientAddr);
+
+          // Use session signer address from server if we don't have it locally
+          if (status.sessionSignerAddress && !sessionSignerRef.current) {
+            setSessionSignerAddress(status.sessionSignerAddress);
+          }
+
+          setIsListening(true);
         }
+        // If server has no active session → user sees setup pipeline (no-op)
       })
-      .catch(() => {});
+      .catch(() => {
+        // Server unreachable — user sees setup pipeline.
+        // No localStorage fallback; they can retry on next load.
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [embeddedWallet]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════
@@ -190,17 +201,30 @@ export function usePipeline() {
   //  Step handlers (setup pipeline — steps 1-7)
   // ═══════════════════════════════════════════════════════════════════
 
-  /** Step 3 — Sign EIP-7702 authorization */
+  /** Step 3 — Sign EIP-7702 authorizations (one per supported chain) */
   const handleSignAuthorization = async () => {
     if (!embeddedWallet) return;
     setAuthStatus("loading");
     setError(null);
     try {
-      const auth = await signAuthorization(
+      const auths: SignAuthorizationReturnType[] = [];
+
+      // Universal (chainId 0) — used for chains that share the same nonce
+      const universalAuth = await signAuthorization(
         { contractAddress: NEXUS_SINGLETON, chainId: 0 },
         { address: embeddedWallet.address },
       );
-      setAuthorization(auth as SignAuthorizationReturnType);
+      auths.push(universalAuth as SignAuthorizationReturnType);
+
+      // Per-chain — used for any chain whose nonce diverges
+      for (const chain of SUPPORTED_CHAINS) {
+        const auth = await signAuthorization(
+          { contractAddress: NEXUS_SINGLETON, chainId: chain.id },
+          { address: embeddedWallet.address },
+        );
+        auths.push(auth as SignAuthorizationReturnType);
+      }
+      setAuthorizations(auths);
       setAuthStatus("success");
     } catch (err) {
       console.error("Failed to sign authorization:", err);
@@ -213,7 +237,7 @@ export function usePipeline() {
 
   /** Step 4 — Initialize Nexus account + MEE client */
   const handleSetupNexus = async () => {
-    if (!embeddedWallet || !authorization) return;
+    if (!embeddedWallet || !authorizations) return;
     setSetupStatus("loading");
     setError(null);
     try {
@@ -236,7 +260,7 @@ export function usePipeline() {
 
   /** Step 5 — Install Smart Sessions module (+ deploy 7702 delegation) */
   const handleInstallSessions = async () => {
-    if (!sessionMeeClientRef.current || !authorization) return;
+    if (!sessionMeeClientRef.current || !authorizations) return;
     setInstallStatus("loading");
     setError(null);
     try {
@@ -256,12 +280,10 @@ export function usePipeline() {
       const ssModule = createSmartSessionModule(sessionSigner);
       sessionModuleRef.current = ssModule;
 
-      // Pass the 7702 authorization so the delegation is propagated
-      // on-chain in the same supertransaction that installs the module.
       const installResult = await installSessionModule({
         sessionMeeClient: sessionMeeClientRef.current,
         smartSessionsValidator: ssModule,
-        authorization,
+        authorizations,
       });
       if (installResult) setInstallTxHash(installResult.hash);
       setInstallStatus("success");
@@ -286,12 +308,8 @@ export function usePipeline() {
         sessionMeeClient: sessionMeeClientRef.current,
         sessionSignerAddress: sessionSignerAddress as `0x${string}`,
         chainIds: SUPPORTED_CHAINS.map((c) => c.id),
-        feeChainId: arbitrum.id,
       });
       setSessionDetails(details);
-      if (embeddedWallet) {
-        saveSessionDetails(embeddedWallet.address, details);
-      }
       setGrantStatus("success");
     } catch (err) {
       console.error("Failed to grant permission:", err);
@@ -312,13 +330,10 @@ export function usePipeline() {
     // 1. Exit listening mode
     setIsListening(false);
 
-    // 2. Clear persisted session details + listening config.
-    //    The session key (signer private key) is kept so we
+    // 2. Pause server-side monitoring while reconfiguring.
+    //    The session key is kept (in localStorage + server) so we
     //    don't have to re-install the sessions module.
     if (embeddedWallet) {
-      clearSession(embeddedWallet.address, { keepKey: true });
-
-      // Pause server-side monitoring while reconfiguring
       reconfigureServerSession(embeddedWallet.address, { active: false }).catch(
         () => {},
       );
@@ -368,8 +383,8 @@ export function usePipeline() {
       // Continue with local cleanup even if server call fails
     }
 
-    // 2. Clear ALL local data (key + details + listening config)
-    clearSession(embeddedWallet.address);
+    // 2. Clear local session key
+    clearSessionKey(embeddedWallet.address);
 
     // 3. Exit listening mode
     setIsListening(false);
@@ -382,7 +397,7 @@ export function usePipeline() {
     sessionModuleRef.current = null;
     meeClientRef.current = null;
     sessionMeeClientRef.current = null;
-    setAuthorization(null);
+    setAuthorizations(null);
 
     // 5. Reset all step statuses so the pipeline starts fresh
     setAuthStatus("idle");
@@ -439,8 +454,8 @@ export function usePipeline() {
       console.error("[full-reset] Failed to deregister from server:", err);
     }
 
-    // 2. Clear ALL local data (key + details + listening config)
-    clearSession(embeddedWallet.address);
+    // 2. Clear local session key
+    clearSessionKey(embeddedWallet.address);
 
     // 3. Exit listening mode
     setIsListening(false);
@@ -453,7 +468,7 @@ export function usePipeline() {
     sessionModuleRef.current = null;
     meeClientRef.current = null;
     sessionMeeClientRef.current = null;
-    setAuthorization(null);
+    setAuthorizations(null);
 
     // 5. Reset all step statuses
     setAuthStatus("idle");
@@ -483,15 +498,6 @@ export function usePipeline() {
 
   useEffect(() => {
     if (grantStatus === "success" && sessionDetails && destConfirmed && !isListening) {
-      // Persist locally
-      if (embeddedWallet) {
-        saveListeningConfig(embeddedWallet.address, {
-          destChainId,
-          recipientIsSelf,
-          recipientAddr,
-        });
-      }
-
       // Register on the server (fire-and-forget — don't block the UI)
       if (embeddedWallet && sessionSignerRef.current) {
         const sessionKey = loadSessionKey(embeddedWallet.address);
@@ -536,10 +542,10 @@ export function usePipeline() {
   }, [authStatus, setupStatus]);
 
   useEffect(() => {
-    if (setupStatus === "success" && authorization && installStatus === "idle")
+    if (setupStatus === "success" && authorizations && installStatus === "idle")
       handleInstallSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setupStatus, authorization, installStatus]);
+  }, [setupStatus, authorizations, installStatus]);
 
   useEffect(() => {
     if (destConfirmed && installStatus === "success" && grantStatus === "idle")
@@ -590,7 +596,7 @@ export function usePipeline() {
   );
   const s4 = deriveStatus(authStatus === "success", setupStatus);
   const s5 = deriveStatus(
-    setupStatus === "success" && !!authorization,
+    setupStatus === "success" && !!authorizations,
     installStatus,
   );
   const s6 = deriveStatus(installStatus === "success", grantStatus);
@@ -703,6 +709,9 @@ export function usePipeline() {
 
     // ── Server-side monitoring status ────────────────────────────────
     serverRegistered,
+
+    // ── Session check loading state ──────────────────────────────────
+    checkingSession,
   };
 }
 

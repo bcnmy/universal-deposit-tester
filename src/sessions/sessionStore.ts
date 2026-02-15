@@ -1,25 +1,22 @@
 /**
- * Session storage — dual layer.
+ * Session storage — server is the source of truth.
  *
- * **Local (localStorage)**:  fast client cache for the active tab so UI
- * resumes instantly on refresh.  Same as before.
+ * On startup the frontend queries the backend via `getServerSessionStatus()`.
+ * If an active session exists the UI jumps straight to the listening
+ * dashboard.  If not the user goes through the configuration / signing flow.
  *
- * **Server (API calls)**:  the source of truth.  When the user finishes
- * the setup pipeline the client calls `registerSessionOnServer()` which
- * POSTs the session key + details + config to the backend.  From that
- * point the server polls and bridges even when the tab is closed.
- *
- * Local helpers are still exported (and used by usePipeline for fast
- * hydration), but the server registration is what enables background
- * execution.
+ * The only piece stored locally (localStorage) is the **session private key**
+ * so we can reuse the same signer if the user refreshes mid-pipeline.
+ * Once the pipeline completes the key is sent to the server (encrypted at
+ * rest) and the server handles all subsequent transaction execution.
  */
 
 import type { SessionDetails } from "./types";
 import { SESSION_VERSION } from "../config";
-import { serialize, deserialize } from "../lib/bigintJson";
+import { serialize } from "../lib/bigintJson";
 
 // ═══════════════════════════════════════════════════════════════════════
-//  LOCAL (localStorage) — fast client-side cache
+//  LOCAL (localStorage) — session key only
 // ═══════════════════════════════════════════════════════════════════════
 
 const KEY_PREFIX = "nexus_session";
@@ -44,50 +41,7 @@ export function loadSessionKey(
   return null;
 }
 
-// ── Session details (grant result) — versioned ──────────────────────
-
-type StoredSessionEnvelope = {
-  version: number;
-  details: SessionDetails;
-};
-
-export function saveSessionDetails(
-  walletAddress: string,
-  details: SessionDetails,
-) {
-  const envelope: StoredSessionEnvelope = {
-    version: SESSION_VERSION,
-    details,
-  };
-  localStorage.setItem(keyFor(walletAddress, "details"), serialize(envelope));
-}
-
-export function loadSessionDetails(
-  walletAddress: string,
-): SessionDetails | null {
-  const raw = localStorage.getItem(keyFor(walletAddress, "details"));
-  if (!raw) return null;
-  try {
-    const parsed = deserialize<StoredSessionEnvelope>(raw);
-
-    if (parsed && typeof parsed === "object" && "version" in parsed) {
-      if (parsed.version !== SESSION_VERSION) {
-        localStorage.removeItem(keyFor(walletAddress, "details"));
-        localStorage.removeItem(keyFor(walletAddress, "listening"));
-        return null;
-      }
-      return parsed.details as SessionDetails;
-    }
-
-    localStorage.removeItem(keyFor(walletAddress, "details"));
-    localStorage.removeItem(keyFor(walletAddress, "listening"));
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// ── Listening config (destination chain + recipient) ─────────────────
+// ── Listening config type (shared with server) ───────────────────────
 
 export type ListeningConfig = {
   destChainId: number;
@@ -95,39 +49,10 @@ export type ListeningConfig = {
   recipientAddr: string;
 };
 
-export function saveListeningConfig(
-  walletAddress: string,
-  config: ListeningConfig,
-) {
-  localStorage.setItem(
-    keyFor(walletAddress, "listening"),
-    JSON.stringify(config),
-  );
-}
-
-export function loadListeningConfig(
-  walletAddress: string,
-): ListeningConfig | null {
-  const raw = localStorage.getItem(keyFor(walletAddress, "listening"));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as ListeningConfig;
-  } catch {
-    return null;
-  }
-}
-
 // ── Clear local session data ─────────────────────────────────────────
 
-export function clearSession(
-  walletAddress: string,
-  options?: { keepKey?: boolean },
-) {
-  if (!options?.keepKey) {
-    localStorage.removeItem(keyFor(walletAddress, "key"));
-  }
-  localStorage.removeItem(keyFor(walletAddress, "details"));
-  localStorage.removeItem(keyFor(walletAddress, "listening"));
+export function clearSessionKey(walletAddress: string) {
+  localStorage.removeItem(keyFor(walletAddress, "key"));
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -164,6 +89,10 @@ export async function registerSessionOnServer(params: {
 export async function getServerSessionStatus(walletAddress: string): Promise<{
   registered: boolean;
   active?: boolean;
+  sessionSignerAddress?: string;
+  listeningConfig?: ListeningConfig;
+  sessionVersion?: number;
+  registeredAt?: string;
   lastPollAt?: string | null;
 }> {
   const res = await fetch(

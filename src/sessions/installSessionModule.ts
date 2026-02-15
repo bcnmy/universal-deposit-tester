@@ -8,26 +8,21 @@ import type { SignAuthorizationReturnType } from "viem/accounts";
 export async function installSessionModule(params: {
   sessionMeeClient: ReturnType<typeof meeSessionActions> & any;
   smartSessionsValidator: ReturnType<typeof toSmartSessionsModule>;
-  /** Optional 7702 authorization — when provided the EIP-7702 delegation
-   *  is propagated on-chain in the same supertransaction that installs the
-   *  sessions module, saving a separate deploy step. */
-  authorization?: SignAuthorizationReturnType;
+  authorizations: SignAuthorizationReturnType[];
 }): Promise<{ hash: Hash } | null> {
-  const { sessionMeeClient, smartSessionsValidator, authorization } = params;
+  const { sessionMeeClient, smartSessionsValidator, authorizations } = params;
+
+  if (!authorizations.length) {
+    throw new Error("installSessionModule requires at least one 7702 authorization");
+  }
 
   const payload = await sessionMeeClient.prepareForPermissions({
     smartSessionsValidator,
     sponsorship: true,
     simulation: { simulate: true },
-    // Piggy-back the 7702 auth so the delegation is activated on all chains
-    // in the same supertransaction that installs the sessions module.
-    ...(authorization
-      ? {
-          delegate: true,
-          multichain7702Auth: true,
-          authorizations: [authorization],
-        }
-      : {}),
+    delegate: true,
+    multichain7702Auth: true,
+    authorizations,
   });
 
   if (payload) {

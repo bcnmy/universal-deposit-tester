@@ -1,14 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import {
-  useWallets,
-  useSign7702Authorization,
-} from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth";
 import {
   erc20Abi,
   createPublicClient,
   type Address,
 } from "viem";
-import type { SignAuthorizationReturnType } from "viem/accounts";
 import {
   runtimeERC20BalanceOf,
   greaterThanOrEqualTo,
@@ -19,7 +15,6 @@ import {
   USDC,
   SUPPORTED_TOKENS,
   TOKEN_SYMBOLS,
-  NEXUS_SINGLETON,
   getTransport,
 } from "../config";
 import { createSessionMeeClient } from "../sessions";
@@ -58,7 +53,6 @@ export type SweepRecord = {
  */
 export function useManageFunds() {
   const { wallets } = useWallets();
-  const { signAuthorization } = useSign7702Authorization();
 
   const embeddedWallet = wallets.find((w) => w.walletClientType === "privy");
 
@@ -179,13 +173,7 @@ export function useManageFunds() {
         mcAccountRef.current = mcAccount;
       }
 
-      // 2. Sign fresh 7702 authorization
-      const auth = await signAuthorization(
-        { contractAddress: NEXUS_SINGLETON, chainId: 0 },
-        { address: embeddedWallet.address },
-      );
-
-      // 3. Build composable transfer instructions for each sweepable token
+      // 2. Build composable transfer instructions for each sweepable token
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allInstructions: any[] = [];
       const sweptTokens: { symbol: string; amount: string }[] = [];
@@ -224,27 +212,22 @@ export function useManageFunds() {
         });
       }
 
-      // 4. Get quote — gas paid with USDC on the selected chain
+      // 3. Get quote — gas paid with USDC on the selected chain
       const quote = await meeClientRef.current.getQuote({
         instructions: allInstructions,
         delegate: true,
-        authorizations: [auth as SignAuthorizationReturnType],
-        multichain7702Auth: true,
-        feeToken: {
-          address: USDC[selectedChainId],
-          chainId: selectedChainId,
-        },
+        sponsorship: true,
         simulation: { simulate: true },
         ...ScheduledExecutionBounds,
       });
 
-      // 5. Sign and execute
+      // 4. Sign and execute
       const signedQuote = await meeClientRef.current.signQuote({ quote });
       const result = await meeClientRef.current.executeSignedQuote({
         signedQuote,
       });
 
-      // 6. Wait for receipt
+      // 5. Wait for receipt
       await meeClientRef.current.waitForSupertransactionReceipt({
         hash: result.hash,
       });
@@ -279,7 +262,6 @@ export function useManageFunds() {
     selectedChainId,
     chainBalances,
     sweepableTokens,
-    signAuthorization,
     fetchBalances,
   ]);
 

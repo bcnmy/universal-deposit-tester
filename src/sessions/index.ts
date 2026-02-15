@@ -7,14 +7,10 @@ export { grantDepositV3Permission } from "./grantDepositV3Permission";
 // executeDepositV3 and executeForwardTransfer are used server-side only
 // (imported directly by src/lib/pollAndBridge.ts)
 export {
-  // Local (localStorage) helpers
+  // Local (localStorage) — session key only
   saveSessionKey,
   loadSessionKey,
-  saveSessionDetails,
-  loadSessionDetails,
-  saveListeningConfig,
-  loadListeningConfig,
-  clearSession,
+  clearSessionKey,
   // Server API helpers
   registerSessionOnServer,
   getServerSessionStatus,

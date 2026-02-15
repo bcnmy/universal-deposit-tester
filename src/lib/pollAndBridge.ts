@@ -2,9 +2,10 @@
  * Server-side balance polling + bridge execution.
  *
  * Called by the cron route (/api/cron/poll). For each registered wallet
- * it checks ERC-20 balances on all watched chains and, if a deposit is
- * detected, triggers a bridge (Across depositV3) or forward transfer
- * using the stored session signer key.
+ * it checks ERC-20 balances for ALL tokens on ALL watched chains and
+ * bridges/forwards every deposit above threshold in a single poll cycle.
+ * This produces up to N supertransactions per wallet (one per detected
+ * token/chain pair), rather than stopping after the first deposit.
  */
 
 import {
@@ -63,6 +64,13 @@ const MIN_BRIDGE_AMOUNTS: Record<string, bigint> = {
 };
 const DEFAULT_MIN_BRIDGE = 100_000n;
 
+/** Biconomy MEE explorer endpoint for tracking supertransaction execution */
+const MEE_EXPLORER_URL = "https://network.biconomy.io/v1/explorer";
+/** How often to poll the explorer while waiting for a supertx to mine */
+const MINE_POLL_INTERVAL_MS = 3_000;
+/** Maximum time to wait for a supertx to mine before giving up */
+const MINE_POLL_TIMEOUT_MS = 120_000;
+
 const CHAIN_BY_ID = Object.fromEntries(
   SUPPORTED_CHAINS.map((ch) => [ch.id, ch]),
 ) as Record<number, Chain>;
@@ -112,6 +120,96 @@ async function buildSessionMeeClient(
   return meeClient.extend(meeSessionActions);
 }
 
+// ── Wait for a supertransaction to be mined on-chain ─────────────────
+//
+// When the first supertx uses ENABLE_AND_USE mode (new session), we must
+// wait for it to confirm before submitting subsequent txs — otherwise
+// they'll also try ENABLE_AND_USE (since checkEnabledPermissions still
+// returns false) and collide with the first enable.
+//
+// Polls: GET https://network.biconomy.io/v1/explorer/{hash}
+//   - userOps[0] = gas payment op (usually SKIPPED)
+//   - userOps[1] = the actual operation → check executionStatus
+
+async function waitForSupertxMined(hash: string): Promise<void> {
+  const start = Date.now();
+  const url = `${MEE_EXPLORER_URL}/${hash}`;
+
+  console.log(boxLine());
+  console.log(
+    boxLine(
+      `⏳ ${c.dim("Waiting for ENABLE_AND_USE supertx to mine before submitting next...")}`,
+    ),
+  );
+
+  while (Date.now() - start < MINE_POLL_TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, MINE_POLL_INTERVAL_MS));
+
+    try {
+      const res = await fetch(url, {
+        headers: { "X-API-Key": BICONOMY_API_KEY },
+      });
+
+      if (!res.ok) {
+        console.log(
+          boxLine(c.dim(`   Explorer API returned ${res.status}, retrying...`)),
+        );
+        continue;
+      }
+
+      const data = await res.json();
+
+      // userOps[0] is the gas payment op, userOps[1] is the actual operation
+      const mainOp = data.userOps?.[1];
+      if (!mainOp?.executionStatus) continue;
+
+      const status = mainOp.executionStatus as string;
+
+      if (status === "MINED_SUCCESS") {
+        const elapsed = Date.now() - start;
+        console.log(
+          boxLine(
+            `✅ ${c.boldGreen("ENABLE_AND_USE tx mined")} ${c.dim(`(${fmtMs(elapsed)})`)}`,
+          ),
+        );
+        return;
+      }
+
+      if (status === "MINED_FAILURE" || status === "REVERTED") {
+        throw new Error(`Supertx ${hash} failed on-chain: ${status}`);
+      }
+
+      // Still pending — keep polling
+      console.log(
+        boxLine(
+          c.dim(
+            `   status=${status} (${fmtMs(Date.now() - start)} elapsed)`,
+          ),
+        ),
+      );
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        err.message.includes("failed on-chain")
+      ) {
+        throw err;
+      }
+      // Network errors — keep retrying
+      console.log(
+        boxLine(
+          c.dim(
+            `   Poll error: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        ),
+      );
+    }
+  }
+
+  throw new Error(
+    `Timed out waiting for supertx ${hash} to mine (${MINE_POLL_TIMEOUT_MS / 1000}s)`,
+  );
+}
+
 // ── Check balances for one wallet ────────────────────────────────────
 
 type DetectedDeposit = {
@@ -133,7 +231,7 @@ type BalanceEntry = {
 
 type CheckResult = {
   entries: BalanceEntry[];
-  deposit: DetectedDeposit | null;
+  deposits: DetectedDeposit[];
 };
 
 async function checkBalances(
@@ -141,7 +239,7 @@ async function checkBalances(
   watchedChainIds: number[],
 ): Promise<CheckResult> {
   const entries: BalanceEntry[] = [];
-  let deposit: DetectedDeposit | null = null;
+  const deposits: DetectedDeposit[] = [];
 
   for (const chainId of watchedChainIds) {
     const chain = CHAIN_BY_ID[chainId];
@@ -178,9 +276,8 @@ async function checkBalances(
             aboveThreshold,
           });
 
-          if (aboveThreshold && !deposit) {
-            deposit = { chainId, tokenSymbol: token.symbol, amount: balance };
-            return { entries, deposit }; // early return on first hit
+          if (aboveThreshold) {
+            deposits.push({ chainId, tokenSymbol: token.symbol, amount: balance });
           }
         }
       } catch (err) {
@@ -198,12 +295,12 @@ async function checkBalances(
     }
   }
 
-  return { entries, deposit };
+  return { entries, deposits };
 }
 
 // ── Process a single wallet (logs boxLine content) ───────────────────
 
-async function processWallet(record: SessionRecord): Promise<string | null> {
+async function processWallet(record: SessionRecord): Promise<string[]> {
   const walletAddress = record.walletAddress as Address;
   const { listeningConfig } = record;
   const { destChainId, recipientIsSelf, recipientAddr } = listeningConfig;
@@ -284,24 +381,47 @@ async function processWallet(record: SessionRecord): Promise<string | null> {
       }
     }
 
-    if (!checkResult.deposit) {
+    if (checkResult.deposits.length === 0) {
       console.log(boxLine(c.dim("   (no deposits above threshold)")));
     }
   }
 
-  const deposit = checkResult.deposit;
-  if (!deposit) return null;
+  const { deposits } = checkResult;
+  if (deposits.length === 0) return [];
 
-  // ── Deposit detected ────────────────────────────────────────────────
+  // ── Deposits detected ───────────────────────────────────────────────
   console.log(boxLine());
   console.log(
     boxLine(
-      `💰 ${c.boldGreen("Deposit detected:")} ` +
-        `${c.boldWhite(fmtToken(deposit.amount, deposit.tokenSymbol))} on ${c.white(chainName(deposit.chainId))}`,
+      `💰 ${c.boldGreen(`${deposits.length} deposit(s) detected:`)}`,
     ),
   );
+  for (const dep of deposits) {
+    console.log(
+      boxLine(
+        `   • ${c.boldWhite(fmtToken(dep.amount, dep.tokenSymbol))} on ${c.white(chainName(dep.chainId))}`,
+      ),
+    );
+  }
 
-  // ── Decrypt + build client ──────────────────────────────────────────
+  // ── Filter out no-ops (on dest chain + recipient is self) ──────────
+  const actionableDeposits = deposits.filter((dep) => {
+    if (dep.chainId === destChainId && recipientIsSelf) {
+      console.log(
+        boxLine(
+          c.dim(
+            `   ⏭ ${fmtToken(dep.amount, dep.tokenSymbol)} on ${chainName(dep.chainId)} — already home (skipped)`,
+          ),
+        ),
+      );
+      return false;
+    }
+    return true;
+  });
+
+  if (actionableDeposits.length === 0) return [];
+
+  // ── Decrypt + build client (once for all deposits) ─────────────────
   const t0 = Date.now();
   const sessionKey = decryptSessionKey(record);
   console.log(
@@ -322,90 +442,117 @@ async function processWallet(record: SessionRecord): Promise<string | null> {
     ? walletAddress
     : (recipientAddr as Address);
 
-  const isOnDestChain = deposit.chainId === destChainId;
+  // ── Check if session permissions are already enabled ───────────────
+  // If not, the first tx will use ENABLE_AND_USE mode. When there are
+  // multiple deposits we must wait for that first tx to mine before
+  // submitting the rest (so they can use plain USE mode).
+  const enabledMap: Record<string, Record<number, boolean>> =
+    await sessionMeeClient.checkEnabledPermissions(sessionDetails);
+  const permissionsPreEnabled = Object.values(enabledMap).some(
+    (chainMap) =>
+      Object.values(chainMap).some((v) => v === true),
+  );
 
-  // ── Execute bridge or forward ───────────────────────────────────────
-  let result: { hash: string };
-
-  if (isOnDestChain) {
-    // Already on destination chain
-    if (recipientIsSelf) {
-      console.log(
-        boxLine(
-          c.dim("Deposit on dest chain & recipient is self — nothing to do"),
+  if (!permissionsPreEnabled && actionableDeposits.length > 1) {
+    console.log(
+      boxLine(
+        c.dim(
+          `   Session not yet enabled on-chain — first tx will use ENABLE_AND_USE`,
         ),
-      );
-      return null;
-    }
-
-    console.log(boxLine());
-    console.log(boxLine(`📤 ${c.boldMagenta("FORWARDING")}`));
-    console.log(
-      boxLine(
-        `   ${c.white(fmtToken(deposit.amount, deposit.tokenSymbol))} on ${c.white(chainName(destChainId))} → ${c.cyan(shortAddr(recipient))}`,
-      ),
-    );
-
-    const t2 = Date.now();
-    result = await executeForwardTransfer({
-      sessionMeeClient,
-      sessionDetails,
-      walletAddress,
-      recipient,
-      chainId: deposit.chainId,
-      amount: deposit.amount,
-      tokenSymbol: deposit.tokenSymbol,
-    });
-
-    console.log(boxLine());
-    console.log(
-      boxLine(
-        `✅ ${c.boldGreen("Forward complete")} ${c.dim(`(${fmtMs(Date.now() - t2)})`)}`,
-      ),
-    );
-  } else {
-    console.log(boxLine());
-    console.log(boxLine(`🌉 ${c.boldMagenta("BRIDGING")}`));
-    console.log(
-      boxLine(
-        `   ${c.white(chainName(deposit.chainId))} → ${c.white(chainName(destChainId))}`,
-      ),
-    );
-    console.log(
-      boxLine(
-        `   ${c.boldWhite(fmtToken(deposit.amount, deposit.tokenSymbol))} → ${c.cyan(shortAddr(recipient))}` +
-          (recipientIsSelf ? c.dim(" (self)") : ""),
-      ),
-    );
-
-    const t2 = Date.now();
-    result = await executeDepositV3({
-      sessionMeeClient,
-      sessionDetails,
-      walletAddress,
-      recipient,
-      sourceChainId: deposit.chainId,
-      destinationChainId: destChainId,
-      amount: deposit.amount,
-      tokenSymbol: deposit.tokenSymbol,
-    });
-
-    console.log(boxLine());
-    console.log(
-      boxLine(
-        `✅ ${c.boldGreen("Bridge complete")} ${c.dim(`(${fmtMs(Date.now() - t2)})`)}`,
       ),
     );
   }
 
-  console.log(boxLine(`   ${kv("Hash", c.yellow(result.hash))}`));
-  console.log(
-    boxLine(
-      `   ${kv("MeeScan", c.yellow(`https://meescan.biconomy.io/details/${result.hash}`))}`,
-    ),
-  );
+  // ── Execute bridge or forward for each deposit ─────────────────────
+  const hashes: string[] = [];
 
-  return result.hash;
+  for (let i = 0; i < actionableDeposits.length; i++) {
+    const deposit = actionableDeposits[i];
+    const idx = `[${i + 1}/${actionableDeposits.length}]`;
+    const isOnDestChain = deposit.chainId === destChainId;
+
+    let result: { hash: string };
+
+    if (isOnDestChain) {
+      // Forward on destination chain to the recipient
+      console.log(boxLine());
+      console.log(boxLine(`📤 ${c.boldMagenta(`FORWARDING ${idx}`)}`));
+      console.log(
+        boxLine(
+          `   ${c.white(fmtToken(deposit.amount, deposit.tokenSymbol))} on ${c.white(chainName(destChainId))} → ${c.cyan(shortAddr(recipient))}`,
+        ),
+      );
+
+      const t2 = Date.now();
+      result = await executeForwardTransfer({
+        sessionMeeClient,
+        sessionDetails,
+        walletAddress,
+        recipient,
+        chainId: deposit.chainId,
+        amount: deposit.amount,
+        tokenSymbol: deposit.tokenSymbol,
+      });
+
+      console.log(boxLine());
+      console.log(
+        boxLine(
+          `✅ ${c.boldGreen(`Forward complete ${idx}`)} ${c.dim(`(${fmtMs(Date.now() - t2)})`)}`,
+        ),
+      );
+    } else {
+      // Bridge from source chain to destination
+      console.log(boxLine());
+      console.log(boxLine(`🌉 ${c.boldMagenta(`BRIDGING ${idx}`)}`));
+      console.log(
+        boxLine(
+          `   ${c.white(chainName(deposit.chainId))} → ${c.white(chainName(destChainId))}`,
+        ),
+      );
+      console.log(
+        boxLine(
+          `   ${c.boldWhite(fmtToken(deposit.amount, deposit.tokenSymbol))} → ${c.cyan(shortAddr(recipient))}` +
+            (recipientIsSelf ? c.dim(" (self)") : ""),
+        ),
+      );
+
+      const t2 = Date.now();
+      result = await executeDepositV3({
+        sessionMeeClient,
+        sessionDetails,
+        walletAddress,
+        recipient,
+        sourceChainId: deposit.chainId,
+        destinationChainId: destChainId,
+        amount: deposit.amount,
+        tokenSymbol: deposit.tokenSymbol,
+      });
+
+      console.log(boxLine());
+      console.log(
+        boxLine(
+          `✅ ${c.boldGreen(`Bridge complete ${idx}`)} ${c.dim(`(${fmtMs(Date.now() - t2)})`)}`,
+        ),
+      );
+    }
+
+    console.log(boxLine(`   ${kv("Hash", c.yellow(result.hash))}`));
+    console.log(
+      boxLine(
+        `   ${kv("MeeScan", c.yellow(`https://meescan.biconomy.io/details/${result.hash}`))}`,
+      ),
+    );
+
+    hashes.push(result.hash);
+
+    // If this was the first tx and it used ENABLE_AND_USE, wait for it to
+    // mine so subsequent txs see permissions as enabled and use USE mode.
+    if (i === 0 && !permissionsPreEnabled && actionableDeposits.length > 1) {
+      await waitForSupertxMined(result.hash);
+    }
+  }
+
+  return hashes;
 }
 
 // ── Main entry point — called by the cron route ──────────────────────
@@ -461,15 +608,17 @@ export async function pollAllSessions(): Promise<PollResult> {
     console.log(boxLine());
 
     try {
-      const hash = await processWallet(record);
+      const hashes = await processWallet(record);
 
       // Update lastPollAt regardless of bridge
       await updateSession(addr, { lastPollAt: new Date().toISOString() });
 
       const elapsed = Date.now() - walletStart;
 
-      if (hash) {
-        result.bridged.push({ walletAddress: addr, hash });
+      if (hashes.length > 0) {
+        for (const hash of hashes) {
+          result.bridged.push({ walletAddress: addr, hash });
+        }
       } else {
         console.log(boxLine());
         console.log(

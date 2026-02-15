@@ -33,6 +33,11 @@ function MainApp() {
   const pipeline = usePipeline();
   const [activeTab, setActiveTab] = useState<AppTab>("overview");
 
+  // While we're checking the server for an existing session, show a
+  // lightweight loading state so the user doesn't see a flash of the
+  // wrong screen (pipeline vs dashboard).
+  const showLoading = pipeline.authenticated && pipeline.checkingSession;
+
   return (
     <div className="app">
       {/* Ambient glow */}
@@ -67,7 +72,16 @@ function MainApp() {
             onCopy={pipeline.handleCopyAddress}
           />
 
-          {pipeline.isListening ? (
+          {showLoading ? (
+            <section className="pipeline-section">
+              <div className="checking-session">
+                <div className="checking-session-spinner" />
+                <p className="checking-session-text">
+                  Checking for existing session…
+                </p>
+              </div>
+            </section>
+          ) : pipeline.isListening ? (
             <ListeningDashboard pipeline={pipeline} />
           ) : (
             <Pipeline pipeline={pipeline} />

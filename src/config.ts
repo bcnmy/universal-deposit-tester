@@ -1,6 +1,18 @@
 import { base, optimism, polygon, arbitrum, mainnet, bsc } from "viem/chains";
 import { http, type Chain, type Transport } from "viem";
 import type { Address } from "viem";
+import { setGlobalConstants } from "@rhinestone/module-sdk";
+
+// ─── Rhinestone Policy Override ──────────────────────────────────────
+// The V1 Sudo Policy (0x0000000000FEEc8D74e3143fBaBbca515358d869) is
+// NOT deployed on Polygon.  The Legacy Sudo Policy below IS deployed on
+// ALL supported chains (Optimism, Base, Arbitrum, Polygon).  Override
+// the global constant so every getSudoPolicy() call — including the
+// SDK-internal ones in grantPermission's userOpPolicies — uses the
+// universally-deployed address.
+setGlobalConstants({
+  SUDO_POLICY_ADDRESS: "0x0000003111cD8e92337C100F22B7A9dbf8DEE301",
+});
 
 /**
  * Map chain IDs → RPC URLs from env vars.
@@ -74,9 +86,10 @@ export const SUPPORTED_TOKENS: Record<string, TokenConfig> = {
 export const TOKEN_SYMBOLS = Object.keys(SUPPORTED_TOKENS) as string[];
 
 // ─── Session Version ─────────────────────────────────────────────────
-// Bump this whenever the session permission scope changes (e.g. new tokens)
-// so that existing stored sessions are invalidated and users must re-enable.
-export const SESSION_VERSION = 3;
+// Bump this whenever the session permission scope changes (e.g. new tokens,
+// policy address changes) so that existing stored sessions are invalidated
+// and users must re-enable.
+export const SESSION_VERSION = 4;
 
 // ─── Biconomy API Key (for MEE service authentication) ──────────────
 export const BICONOMY_API_KEY =
