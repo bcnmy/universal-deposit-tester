@@ -12,6 +12,7 @@ import {
   Radio,
   LogOut,
   AlertTriangle,
+  Bomb,
 } from "lucide-react";
 
 // ── Hardcoded admin address ──────────────────────────────────────────
@@ -86,6 +87,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [nuking, setNuking] = useState(false);
+  const [nukeConfirm, setNukeConfirm] = useState(false);
+  const [nukeResult, setNukeResult] = useState<string | null>(null);
   const [step, setStep] = useState<"connect" | "sign" | "dashboard">("connect");
 
   // ── Connect wallet ──────────────────────────────────────────────
@@ -172,6 +176,37 @@ export default function AdminPage() {
     },
     [auth],
   );
+
+  // ── Nuke all data ──────────────────────────────────────────────
+  const handleNuke = useCallback(async () => {
+    if (!auth) return;
+    setNuking(true);
+    setError(null);
+    setNukeResult(null);
+    try {
+      const res = await fetch("/api/admin/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-signature": auth.signature,
+          "x-admin-message": auth.message,
+          "x-admin-address": auth.address,
+        },
+        body: JSON.stringify({ confirm: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setSessions([]);
+      setNukeConfirm(false);
+      setNukeResult(
+        `All data wiped successfully. ${data.sessionsWiped ?? 0} session(s) removed.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nuke failed");
+    } finally {
+      setNuking(false);
+    }
+  }, [auth]);
 
   // ── Disconnect ─────────────────────────────────────────────────
   const handleDisconnect = useCallback(() => {
@@ -374,6 +409,67 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+
+          {/* ── Danger zone: Nuke all data ─────────────────── */}
+          <div className="admin-nuke-section">
+            <div className="admin-nuke-header">
+              <h2 className="admin-nuke-title">Danger Zone</h2>
+              <p className="admin-nuke-desc">
+                Permanently delete all data from Redis — sessions, history, and
+                every stored key. This action cannot be undone.
+              </p>
+            </div>
+
+            {nukeResult && (
+              <div className="admin-nuke-result">
+                <CheckCircle size={16} />
+                <span>{nukeResult}</span>
+                <button
+                  className="admin-error-dismiss"
+                  onClick={() => setNukeResult(null)}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {!nukeConfirm ? (
+              <button
+                className="admin-nuke-btn"
+                onClick={() => setNukeConfirm(true)}
+              >
+                <Bomb size={16} />
+                Delete All Data
+              </button>
+            ) : (
+              <div className="admin-nuke-confirm">
+                <p className="admin-nuke-confirm-text">
+                  Are you absolutely sure? This will wipe <strong>everything</strong>.
+                </p>
+                <div className="admin-nuke-confirm-actions">
+                  <button
+                    className="admin-nuke-btn admin-nuke-btn--confirm"
+                    onClick={handleNuke}
+                    disabled={nuking}
+                  >
+                    {nuking ? (
+                      <RefreshCw size={14} className="icon-spin" />
+                    ) : (
+                      <Bomb size={14} />
+                    )}
+                    {nuking ? "Wiping…" : "Yes, wipe everything"}
+                  </button>
+                  <button
+                    className="admin-nuke-cancel-btn"
+                    onClick={() => setNukeConfirm(false)}
+                    disabled={nuking}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

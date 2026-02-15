@@ -5,6 +5,7 @@
  * Every request must include a valid signature from the hardcoded admin address.
  *
  * GET    — List all sessions (active set + details)
+ * POST   — Nuclear: flush ALL data from Redis (sessions, history, everything)
  * DELETE — Remove a session by wallet address (?address=0x…)
  */
 
@@ -14,6 +15,7 @@ import {
   getActiveAddresses,
   getSession,
   deleteSession,
+  deleteAllData,
 } from "@/lib/db";
 
 // ── Hardcoded admin address ──────────────────────────────────────────
@@ -91,6 +93,43 @@ export async function GET(req: Request) {
     return NextResponse.json({
       sessions: sessions.filter(Boolean),
       total: addresses.length,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal error" },
+      { status: 500 },
+    );
+  }
+}
+
+// ── POST — nuclear: flush ALL data ───────────────────────────────────
+export async function POST(req: Request) {
+  const auth = await verifyAdmin(req);
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  // Require explicit confirmation in the body
+  let body: { confirm?: boolean } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // empty body
+  }
+
+  if (body.confirm !== true) {
+    return NextResponse.json(
+      { error: 'Missing { "confirm": true } in request body' },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await deleteAllData();
+    return NextResponse.json({
+      ok: true,
+      message: "All data has been wiped",
+      sessionsWiped: result.sessionsWiped,
     });
   } catch (err) {
     return NextResponse.json(

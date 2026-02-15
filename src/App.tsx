@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePipeline } from "./hooks/usePipeline";
 import { TopBar, type AppTab } from "./components/TopBar";
 import { Hero } from "./components/Hero";
 import { Pipeline } from "./components/Pipeline";
 import { ListeningDashboard } from "./components/ListeningDashboard";
 import { ManageFunds } from "./components/ManageFunds";
+import { BridgeHistory } from "./components/BridgeHistory";
 import { PaymentPage } from "./components/PaymentPage";
 import { ErrorToast } from "./components/ErrorToast";
 import "./App.css";
@@ -33,6 +34,13 @@ function MainApp() {
   const pipeline = usePipeline();
   const [activeTab, setActiveTab] = useState<AppTab>("overview");
 
+  // Force back to overview when the address is deactivated (e.g. reconfigure/delete)
+  useEffect(() => {
+    if (!pipeline.isListening && activeTab !== "overview") {
+      setActiveTab("overview");
+    }
+  }, [pipeline.isListening, activeTab]);
+
   // While we're checking the server for an existing session, show a
   // lightweight loading state so the user doesn't see a flash of the
   // wrong screen (pipeline vs dashboard).
@@ -55,6 +63,7 @@ function MainApp() {
 
       <TopBar
         authenticated={pipeline.authenticated}
+        addressActivated={pipeline.isListening}
         walletAddress={pipeline.embeddedWallet?.address}
         copied={pipeline.copied}
         onCopy={pipeline.handleCopyAddress}
@@ -67,6 +76,7 @@ function MainApp() {
         <>
           <Hero
             authenticated={pipeline.authenticated}
+            addressActivated={pipeline.isListening}
             walletAddress={pipeline.embeddedWallet?.address}
             copied={pipeline.copied}
             onCopy={pipeline.handleCopyAddress}
@@ -87,6 +97,8 @@ function MainApp() {
             <Pipeline pipeline={pipeline} />
           )}
         </>
+      ) : activeTab === "history" ? (
+        <BridgeHistory />
       ) : (
         <ManageFunds />
       )}

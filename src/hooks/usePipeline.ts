@@ -4,7 +4,7 @@ import {
   useWallets,
   useSign7702Authorization,
 } from "@privy-io/react-auth";
-import { type Hash } from "viem";
+import { type Hash, createPublicClient } from "viem";
 import { base } from "viem/chains";
 import type { MultichainSmartAccount } from "@biconomy/abstractjs";
 import type {
@@ -26,7 +26,7 @@ import {
   deregisterServerSession,
   type SessionDetails,
 } from "../sessions/index";
-import { NEXUS_SINGLETON, SUPPORTED_CHAINS } from "../config";
+import { NEXUS_SINGLETON, SUPPORTED_CHAINS, getTransport } from "../config";
 import { isValidAddress, deriveStatus } from "../utils";
 import type { Status, StepStatus } from "../types";
 
@@ -201,29 +201,50 @@ export function usePipeline() {
   //  Step handlers (setup pipeline — steps 1-7)
   // ═══════════════════════════════════════════════════════════════════
 
-  /** Step 3 — Sign EIP-7702 authorizations (one per supported chain) */
+  /** Step 3 — Sign EIP-7702 authorizations.
+   *  If the account nonce is 0 on every supported chain (brand-new account),
+   *  the MEE service expects a single multichain authorization with chainId 0.
+   *  Otherwise we sign both a universal (chainId 0) and per-chain authorizations
+   *  to cover chains whose nonces may have diverged. */
   const handleSignAuthorization = async () => {
     if (!embeddedWallet) return;
     setAuthStatus("loading");
     setError(null);
     try {
+      const address = embeddedWallet.address as `0x${string}`;
+
+      // ── Check nonces on every supported chain ─────────────────────
+      const nonces = await Promise.all(
+        SUPPORTED_CHAINS.map(async (chain) => {
+          const client = createPublicClient({
+            chain,
+            transport: getTransport(chain),
+          });
+          return client.getTransactionCount({ address });
+        }),
+      );
+      const allNoncesZero = nonces.every((n) => n === 0);
+
       const auths: SignAuthorizationReturnType[] = [];
 
-      // Universal (chainId 0) — used for chains that share the same nonce
+      // Universal (chainId 0) — always needed
       const universalAuth = await signAuthorization(
         { contractAddress: NEXUS_SINGLETON, chainId: 0 },
         { address: embeddedWallet.address },
       );
       auths.push(universalAuth as SignAuthorizationReturnType);
 
-      // Per-chain — used for any chain whose nonce diverges
-      for (const chain of SUPPORTED_CHAINS) {
-        const auth = await signAuthorization(
-          { contractAddress: NEXUS_SINGLETON, chainId: chain.id },
-          { address: embeddedWallet.address },
-        );
-        auths.push(auth as SignAuthorizationReturnType);
+      // Per-chain — only needed when nonces have diverged across chains
+      if (!allNoncesZero) {
+        for (const chain of SUPPORTED_CHAINS) {
+          const auth = await signAuthorization(
+            { contractAddress: NEXUS_SINGLETON, chainId: chain.id },
+            { address: embeddedWallet.address },
+          );
+          auths.push(auth as SignAuthorizationReturnType);
+        }
       }
+
       setAuthorizations(auths);
       setAuthStatus("success");
     } catch (err) {

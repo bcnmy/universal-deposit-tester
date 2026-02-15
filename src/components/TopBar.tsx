@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowLeftRight, Check, Copy, LayoutDashboard, LogOut, Wallet } from "lucide-react";
+import { ArrowLeftRight, Check, Copy, History, LayoutDashboard, LogOut, Wallet } from "lucide-react";
 import { shortAddr } from "../utils";
 
-export type AppTab = "overview" | "manage";
+export type AppTab = "overview" | "manage" | "history";
 
 interface TopBarProps {
   authenticated: boolean;
+  addressActivated: boolean;
   walletAddress?: string;
   copied: boolean;
   onCopy: () => void;
@@ -17,6 +18,7 @@ interface TopBarProps {
 
 export function TopBar({
   authenticated,
+  addressActivated,
   walletAddress,
   copied,
   onCopy,
@@ -42,26 +44,39 @@ export function TopBar({
             <LayoutDashboard size={13} />
             Overview
           </button>
-          <button
-            className={`topbar-tab${activeTab === "manage" ? " topbar-tab--active" : ""}`}
-            onClick={() => onTabChange("manage")}
-          >
-            <Wallet size={13} />
-            Manage Funds
-          </button>
+          {addressActivated && (
+            <>
+              <button
+                className={`topbar-tab${activeTab === "manage" ? " topbar-tab--active" : ""}`}
+                onClick={() => onTabChange("manage")}
+              >
+                <Wallet size={13} />
+                Manage Funds
+              </button>
+              <button
+                className={`topbar-tab${activeTab === "history" ? " topbar-tab--active" : ""}`}
+                onClick={() => onTabChange("history")}
+              >
+                <History size={13} />
+                History
+              </button>
+            </>
+          )}
         </div>
       )}
 
       {authenticated && walletAddress ? (
         <div className="topbar-actions">
-          <button
-            className={`chip-addr${copied ? " chip-addr--copied" : ""}`}
-            onClick={onCopy}
-          >
-            <span className="chip-dot" />
-            {copied ? "Copied" : shortAddr(walletAddress)}
-            {copied ? <Check size={12} /> : <Copy size={12} />}
-          </button>
+          {addressActivated && (
+            <button
+              className={`chip-addr${copied ? " chip-addr--copied" : ""}`}
+              onClick={onCopy}
+            >
+              <span className="chip-dot" />
+              {copied ? "Copied" : shortAddr(walletAddress)}
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+            </button>
+          )}
           <button className="btn-ghost" onClick={onLogout}>
             <LogOut size={13} />
             Disconnect

@@ -225,3 +225,24 @@ export async function getActiveAddresses(): Promise<string[]> {
 export function decryptSessionKey(record: SessionRecord): `0x${string}` {
   return decryptPrivateKey(record.encryptedKey) as `0x${string}`;
 }
+
+/**
+ * Nuclear option: flush the entire Redis database.
+ * This removes ALL keys — sessions, history, active set, everything.
+ * Returns the count of active sessions that were wiped (for logging).
+ */
+export async function deleteAllData(): Promise<{ sessionsWiped: number }> {
+  const r = redis();
+
+  // Grab count before nuking so we can report it
+  const addresses = (await r.smembers(ACTIVE_SET)) as string[];
+  const count = addresses.length;
+
+  await r.flushdb();
+
+  console.log(
+    c.boldRed(`  🗄 ⚠ FLUSHED entire Redis database — ${count} session(s) wiped`),
+  );
+
+  return { sessionsWiped: count };
+}

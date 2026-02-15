@@ -137,9 +137,20 @@ export function ListeningDashboard({ pipeline: p }: Props) {
             <button
               className="listening-reconfigure-btn"
               onClick={p.handleReconfigure}
+              disabled={p.reconfigureStatus === "loading"}
             >
-              <Settings2 size={14} />
-              Reconfigure
+              {p.reconfigureStatus === "loading" ? (
+                <Loader2 size={14} className="icon-spin" />
+              ) : p.reconfigureStatus === "done" ? (
+                <CheckCircle2 size={14} />
+              ) : (
+                <Settings2 size={14} />
+              )}
+              {p.reconfigureStatus === "loading"
+                ? "Reconfiguring…"
+                : p.reconfigureStatus === "done"
+                  ? "Reconfigured"
+                  : "Reconfigure"}
             </button>
 
             <button

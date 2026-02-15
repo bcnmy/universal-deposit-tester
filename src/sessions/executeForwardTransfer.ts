@@ -7,7 +7,6 @@ import {
 import { SUPPORTED_TOKENS } from "../config";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
-import { c, boxLine } from "../lib/log";
 
 export type ExecuteForwardTransferParams = {
   /** The session MEE client (with meeSessionActions extended) */
@@ -67,15 +66,6 @@ export async function executeForwardTransfer(
     (chainMap) => chainMap[chainId] === true,
   );
   const mode = alreadyEnabled ? "USE" : "ENABLE_AND_USE";
-
-  console.log(
-    boxLine(
-      c.dim(`   Session: ${mode}`) +
-        (alreadyEnabled
-          ? c.dim(" (permissions pre-enabled)")
-          : c.dim(" (will enable + use)")),
-    ),
-  );
 
   // Build a simple ERC20 transfer call
   const transferCalldata = encodeFunctionData({

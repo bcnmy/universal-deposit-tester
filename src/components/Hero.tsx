@@ -7,12 +7,13 @@ import { SUPPORTED_CHAINS } from "../config";
 
 interface HeroProps {
   authenticated: boolean;
+  addressActivated: boolean;
   walletAddress?: string;
   copied: boolean;
   onCopy: () => void;
 }
 
-export function Hero({ authenticated, walletAddress, copied, onCopy }: HeroProps) {
+export function Hero({ authenticated, addressActivated, walletAddress, copied, onCopy }: HeroProps) {
   const [shared, setShared] = useState(false);
 
   const handleShare = useCallback(async () => {
@@ -35,7 +36,7 @@ export function Hero({ authenticated, walletAddress, copied, onCopy }: HeroProps
 
   return (
     <header className="hero">
-      {authenticated && walletAddress ? (
+      {authenticated && addressActivated && walletAddress ? (
         <>
           <span className="hero-label">Universal Deposit Address</span>
           <div className="hero-address-row">
