@@ -10,9 +10,14 @@ import {
   ArrowRight,
   Layers,
 } from "lucide-react";
-import { SUPPORTED_CHAINS, SUPPORTED_TOKENS, TOKEN_SYMBOLS } from "../config";
+import { SUPPORTED_CHAINS, SUPPORTED_TOKENS } from "../config";
 import { CHAIN_META, MEESCAN_URL } from "../constants";
-import { useManageFunds, type SweepRecord } from "../hooks/useManageFunds";
+import {
+  useManageFunds,
+  SWEEP_SYMBOLS,
+  NATIVE_ETH_SYMBOL,
+  type SweepRecord,
+} from "../hooks/useManageFunds";
 import { formatTokenBySymbol, shortAddr, isValidAddress } from "../utils";
 
 export function ManageFunds() {
@@ -83,9 +88,10 @@ export function ManageFunds() {
           </div>
 
           <div className="manage-balance-list">
-            {TOKEN_SYMBOLS.map((sym) => {
-              const config = SUPPORTED_TOKENS[sym];
-              const hasToken = !!config.addresses[mf.selectedChainId];
+            {SWEEP_SYMBOLS.map((sym) => {
+              const isNative = sym === NATIVE_ETH_SYMBOL;
+              const config = isNative ? null : SUPPORTED_TOKENS[sym];
+              const hasToken = isNative || !!config?.addresses[mf.selectedChainId];
               const bal = mf.chainBalances[sym] ?? 0n;
               const isSweepable = mf.sweepableTokens.includes(sym);
 
@@ -95,7 +101,9 @@ export function ManageFunds() {
                   className={`manage-token-row${isSweepable ? " manage-token-row--sweepable" : ""}${!hasToken ? " manage-token-row--disabled" : ""}`}
                 >
                   <span className="manage-token-symbol">{sym}</span>
-                  <span className="manage-token-name">{config.name}</span>
+                  <span className="manage-token-name">
+                    {isNative ? "Native Ether" : config!.name}
+                  </span>
                   <span className="manage-token-bal">
                     {hasToken ? formatTokenBySymbol(bal, sym) : "N/A"}
                   </span>

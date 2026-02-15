@@ -5,14 +5,9 @@ import {
   createPublicClient,
   type Address,
 } from "viem";
-import {
-  runtimeERC20BalanceOf,
-  greaterThanOrEqualTo,
-  type MultichainSmartAccount,
-} from "@biconomy/abstractjs";
+import { type MultichainSmartAccount } from "@biconomy/abstractjs";
 import {
   SUPPORTED_CHAINS,
-  USDC,
   SUPPORTED_TOKENS,
   TOKEN_SYMBOLS,
   getTransport,
@@ -24,11 +19,18 @@ import type { Status } from "../types";
 
 const POLL_INTERVAL = 15_000;
 
+/** Symbol used for native ETH in balances/sweep maps (not in SUPPORTED_TOKENS) */
+export const NATIVE_ETH_SYMBOL = "ETH";
+
+/** All symbols the sweep UI cares about: ERC-20 tokens + native ETH */
+export const SWEEP_SYMBOLS = [...TOKEN_SYMBOLS, NATIVE_ETH_SYMBOL];
+
 /** Per-token minimum sweep thresholds */
 const MIN_SWEEP_AMOUNTS: Record<string, bigint> = {
   USDC: 100_000n, // 0.1 USDC
   USDT: 100_000n, // 0.1 USDT
   WETH: 10_000_000_000_000n, // 0.00001 WETH
+  [NATIVE_ETH_SYMBOL]: 10_000_000_000_000n, // 0.00001 ETH
 };
 const DEFAULT_MIN_SWEEP = 100_000n;
 
@@ -43,13 +45,12 @@ export type SweepRecord = {
 /**
  * Hook for the "Manage Funds" page.
  *
- * - Fetches balances for **all tokens** on **all supported chains**.
+ * - Fetches balances for **all tokens + native ETH** on **all supported chains**.
  * - Displays per-chain totals and lets the user pick a chain.
- * - Sweeps all tokens on the selected chain in a **single batch**
+ * - Sweeps all tokens + native ETH on the selected chain in a **single batch**
  *   supertransaction via the user's Privy wallet (no session keys).
- * - Uses **runtime parameter injection** (`runtimeERC20BalanceOf`) so
- *   transfer amounts are resolved at execution time — after gas is deducted.
- * - Gas is paid with USDC (`feeToken`), so no native tokens are needed.
+ * - Uses static amounts from the fetched balances (no composability).
+ * - Gas is sponsored, so no fee token is needed.
  */
 export function useManageFunds() {
   const { wallets } = useWallets();
@@ -95,6 +96,19 @@ export function useManageFunds() {
       newBalances[chain.id] = {};
       const client = createPublicClient({ chain, transport: getTransport(chain) });
 
+      // Fetch native ETH balance
+      tasks.push(
+        client
+          .getBalance({ address: embeddedWallet.address as Address })
+          .then((balance) => {
+            newBalances[chain.id][NATIVE_ETH_SYMBOL] = balance;
+          })
+          .catch(() => {
+            newBalances[chain.id][NATIVE_ETH_SYMBOL] = 0n;
+          }),
+      );
+
+      // Fetch ERC-20 balances
       for (const [symbol, config] of Object.entries(SUPPORTED_TOKENS)) {
         const tokenAddr = config.addresses[chain.id];
         if (!tokenAddr) {
@@ -140,7 +154,7 @@ export function useManageFunds() {
 
   const sweepableTokens = useMemo(
     () =>
-      TOKEN_SYMBOLS.filter((sym) => {
+      SWEEP_SYMBOLS.filter((sym) => {
         const bal = chainBalances[sym] ?? 0n;
         const min = MIN_SWEEP_AMOUNTS[sym] ?? DEFAULT_MIN_SWEEP;
         return bal >= min;
@@ -173,46 +187,55 @@ export function useManageFunds() {
         mcAccountRef.current = mcAccount;
       }
 
-      // 2. Build composable transfer instructions for each sweepable token
+      // 2. Build transfer instructions for each sweepable token (no composability)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allInstructions: any[] = [];
       const sweptTokens: { symbol: string; amount: string }[] = [];
 
       for (const sym of sweepableTokens) {
-        const config = SUPPORTED_TOKENS[sym];
-        const tokenAddr = config.addresses[selectedChainId];
-        if (!tokenAddr) continue;
-
         const bal = chainBalances[sym] ?? 0n;
-        const minSweep = MIN_SWEEP_AMOUNTS[sym] ?? DEFAULT_MIN_SWEEP;
 
-        const instructions = await mcAccountRef.current!.buildComposable({
-          type: "default",
-          data: {
-            to: tokenAddr,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            abi: erc20Abi as any,
-            functionName: "transfer",
-            args: [
-              recipient as Address,
-              runtimeERC20BalanceOf({
-                targetAddress: address,
-                tokenAddress: tokenAddr,
-                constraints: [greaterThanOrEqualTo(minSweep)],
-              }),
-            ],
-            chainId: selectedChainId,
-          },
-        });
+        if (sym === NATIVE_ETH_SYMBOL) {
+          // ── Native ETH: plain value transfer ──
+          const instructions = await mcAccountRef.current!.build({
+            type: "nativeTokenTransfer",
+            data: {
+              to: recipient as Address,
+              value: bal,
+              chainId: selectedChainId,
+            },
+          });
 
-        allInstructions.push(...instructions);
-        sweptTokens.push({
-          symbol: sym,
-          amount: formatTokenBySymbol(bal, sym),
-        });
+          allInstructions.push(...instructions);
+          sweptTokens.push({
+            symbol: sym,
+            amount: formatTokenBySymbol(bal, sym),
+          });
+        } else {
+          // ── ERC-20: standard transfer ──
+          const config = SUPPORTED_TOKENS[sym];
+          const tokenAddr = config.addresses[selectedChainId];
+          if (!tokenAddr) continue;
+
+          const instructions = await mcAccountRef.current!.build({
+            type: "transfer",
+            data: {
+              tokenAddress: tokenAddr,
+              amount: bal,
+              recipient: recipient as Address,
+              chainId: selectedChainId,
+            },
+          });
+
+          allInstructions.push(...instructions);
+          sweptTokens.push({
+            symbol: sym,
+            amount: formatTokenBySymbol(bal, sym),
+          });
+        }
       }
 
-      // 3. Get quote — gas paid with USDC on the selected chain
+      // 3. Get quote — gas is sponsored
       const quote = await meeClientRef.current.getQuote({
         instructions: allInstructions,
         delegate: true,
