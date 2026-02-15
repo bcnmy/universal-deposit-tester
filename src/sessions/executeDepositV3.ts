@@ -54,7 +54,9 @@ export async function executeDepositV3(
   if (!outputTokenAddress)
     throw new Error(`${tokenSymbol} not available on chain ${destinationChainId}`);
 
-  const now = Math.floor(Date.now() / 1000);
+  // Subtract 60s to avoid InvalidQuoteTimestamp from clock skew between
+  // the server (e.g. Vercel) and the chain's block timestamp.
+  const now = Math.floor(Date.now() / 1000) - 60;
 
   // Approve the SpokePool to spend the token
   const approveCalldata = encodeFunctionData({
