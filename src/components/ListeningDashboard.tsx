@@ -8,7 +8,6 @@ import {
   Trash2,
   Loader2,
   CheckCircle2,
-  RotateCcw,
 } from "lucide-react";
 import type { PipelineState } from "../hooks/usePipeline";
 import { CHAIN_META } from "../constants";
@@ -147,29 +146,10 @@ export function ListeningDashboard({ pipeline: p }: Props) {
                 <Settings2 size={14} />
               )}
               {p.reconfigureStatus === "loading"
-                ? "Reconfiguring…"
+                ? "Changing…"
                 : p.reconfigureStatus === "done"
-                  ? "Reconfigured"
-                  : "Reconfigure"}
-            </button>
-
-            <button
-              className="listening-reset-btn"
-              onClick={p.handleFullReset}
-              disabled={p.resetStatus === "loading"}
-            >
-              {p.resetStatus === "loading" ? (
-                <Loader2 size={14} className="icon-spin" />
-              ) : p.resetStatus === "done" ? (
-                <CheckCircle2 size={14} />
-              ) : (
-                <RotateCcw size={14} />
-              )}
-              {p.resetStatus === "loading"
-                ? "Resetting…"
-                : p.resetStatus === "done"
-                  ? "Re-setup started"
-                  : "Full Reset & Re-setup"}
+                  ? "Changed"
+                  : "Change Recipient or Destination Chain"}
             </button>
 
             <button
@@ -185,10 +165,10 @@ export function ListeningDashboard({ pipeline: p }: Props) {
                 <Trash2 size={14} />
               )}
               {p.deleteStatus === "loading"
-                ? "Deleting…"
+                ? "Disabling…"
                 : p.deleteStatus === "done"
-                  ? "Deleted"
-                  : "Delete Session Data"}
+                  ? "Disabled"
+                  : "Disable Deposit Address"}
             </button>
           </div>
         </div>
