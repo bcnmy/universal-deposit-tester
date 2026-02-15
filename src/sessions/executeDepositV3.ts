@@ -8,7 +8,6 @@ import {
 import { ACROSS_SPOKEPOOL, SUPPORTED_TOKENS, DEPOSIT_V3_ABI } from "../config";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
-import { c, boxLine } from "../lib/log";
 
 export type ExecuteDepositV3Params = {
   /** The session MEE client (with meeSessionActions extended) */
@@ -94,15 +93,6 @@ export async function executeDepositV3(
     (chainMap) => chainMap[sourceChainId] === true,
   );
   const mode = alreadyEnabled ? "USE" : "ENABLE_AND_USE";
-
-  console.log(
-    boxLine(
-      c.dim(`   Session: ${mode}`) +
-        (alreadyEnabled
-          ? c.dim(" (permissions pre-enabled)")
-          : c.dim(" (will enable + use)")),
-    ),
-  );
 
   const result = await sessionMeeClient.usePermission({
     sessionDetails,
