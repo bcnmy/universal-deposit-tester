@@ -347,7 +347,11 @@ export function usePipeline() {
   //  the next executeDepositV3 will use ENABLE_AND_USE automatically.
   // ═══════════════════════════════════════════════════════════════════
 
-  const handleReconfigure = useCallback(() => {
+  const [reconfigureStatus, setReconfigureStatus] = useState<"idle" | "loading" | "done">("idle");
+
+  const handleReconfigure = useCallback(async () => {
+    setReconfigureStatus("loading");
+
     // 1. Exit listening mode
     setIsListening(false);
 
@@ -355,9 +359,11 @@ export function usePipeline() {
     //    The session key is kept (in localStorage + server) so we
     //    don't have to re-install the sessions module.
     if (embeddedWallet) {
-      reconfigureServerSession(embeddedWallet.address, { active: false }).catch(
-        () => {},
-      );
+      try {
+        await reconfigureServerSession(embeddedWallet.address, { active: false });
+      } catch {
+        // Continue with local cleanup even if server call fails
+      }
       setServerRegistered(false);
     }
 
@@ -372,6 +378,9 @@ export function usePipeline() {
 
     // 6. Clear any lingering error
     setError(null);
+
+    setReconfigureStatus("done");
+    setTimeout(() => setReconfigureStatus("idle"), 2000);
   }, [embeddedWallet]);
 
   // ═══════════════════════════════════════════════════════════════════
@@ -719,6 +728,7 @@ export function usePipeline() {
 
     // ── Reconfigure ─────────────────────────────────────────────────
     handleReconfigure,
+    reconfigureStatus,
 
     // ── Delete session ──────────────────────────────────────────────
     handleDeleteSession,

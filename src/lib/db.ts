@@ -84,9 +84,24 @@ function redis(): Redis {
   return _redis;
 }
 
+/** A single bridge/forward history entry stored per wallet. */
+export type HistoryEntry = {
+  timestamp: string;
+  type: "bridge" | "forward";
+  status: "success" | "error";
+  hash?: string;
+  error?: string;
+  tokenSymbol: string;
+  amount: string;
+  sourceChainId: number;
+  destChainId: number;
+  recipient: string;
+};
+
 // ── Key helpers ──────────────────────────────────────────────────────
 
 const sessionKey = (addr: string) => `session:${addr.toLowerCase()}`;
+const historyKey = (addr: string) => `history:${addr.toLowerCase()}`;
 const ACTIVE_SET = "sessions:active";
 
 // ── Internal: parse a raw Redis value into a SessionRecord ───────────
@@ -224,6 +239,49 @@ export async function getActiveAddresses(): Promise<string[]> {
 /** Decrypt the session private key from a stored record. */
 export function decryptSessionKey(record: SessionRecord): `0x${string}` {
   return decryptPrivateKey(record.encryptedKey) as `0x${string}`;
+}
+
+// ── History API ──────────────────────────────────────────────────────
+
+/**
+ * Retrieve a page of history entries for a wallet (newest first).
+ * Uses a Redis list (`history:<address>`) where entries are LPUSHed,
+ * so index 0 is always the most recent.
+ */
+export async function getHistory(
+  walletAddress: string,
+  offset = 0,
+  limit = 50,
+): Promise<HistoryEntry[]> {
+  const raw = await redis().lrange(historyKey(walletAddress), offset, offset + limit - 1);
+  return (raw as (string | Record<string, unknown>)[]).map((item) => {
+    if (typeof item === "string") {
+      return deserialize<HistoryEntry>(item);
+    }
+    return reviveBigInts<HistoryEntry>(item);
+  });
+}
+
+/** Return the total number of history entries for a wallet. */
+export async function getHistoryCount(walletAddress: string): Promise<number> {
+  return redis().llen(historyKey(walletAddress));
+}
+
+/**
+ * Push a new history entry to the front of the wallet's history list.
+ * Newest entries are always at index 0.
+ */
+export async function addHistoryEntry(
+  walletAddress: string,
+  entry: HistoryEntry,
+): Promise<void> {
+  const payload = serialize(entry);
+  await redis().lpush(historyKey(walletAddress), payload);
+  console.log(
+    c.dim(
+      `  🗄 History entry for ${shortAddr(walletAddress)}  (${fmtBytes(payload.length)})`,
+    ),
+  );
 }
 
 /**
