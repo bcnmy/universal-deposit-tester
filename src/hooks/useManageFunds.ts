@@ -258,7 +258,7 @@ export function useManageFunds() {
       setTxHash(result.hash);
       setSweepStatus("success");
 
-      // Record the sweep
+      // Record the sweep in local state
       setSweeps((prev) => [
         {
           chainId: selectedChainId,
@@ -269,6 +269,28 @@ export function useManageFunds() {
         },
         ...prev,
       ]);
+
+      // Persist each swept token as a history entry
+      for (const swept of sweptTokens) {
+        const bal = chainBalances[swept.symbol] ?? 0n;
+        fetch(`/api/history/${address}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            timestamp: new Date().toISOString(),
+            type: "sweep",
+            status: "success",
+            hash: result.hash,
+            tokenSymbol: swept.symbol,
+            amount: String(bal),
+            sourceChainId: selectedChainId,
+            destChainId: selectedChainId,
+            recipient,
+          }),
+        }).catch((err) => {
+          console.error("Failed to persist sweep history entry:", err);
+        });
+      }
 
       // Refresh balances
       fetchBalances();

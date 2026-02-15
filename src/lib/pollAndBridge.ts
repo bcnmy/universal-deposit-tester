@@ -49,7 +49,9 @@ import {
   getSession,
   updateSession,
   decryptSessionKey,
+  addHistoryEntry,
   type SessionRecord,
+  type HistoryEntry,
 } from "./db";
 import { executeDepositV3 } from "../sessions/executeDepositV3";
 import { executeForwardTransfer } from "../sessions/executeForwardTransfer";
@@ -500,6 +502,19 @@ async function processWallet(record: SessionRecord): Promise<string[]> {
           `✅ ${c.boldGreen(`Forward complete ${idx}`)} ${c.dim(`(${fmtMs(Date.now() - t2)})`)}`,
         ),
       );
+
+      // Record forward in history
+      await addHistoryEntry(walletAddress, {
+        timestamp: new Date().toISOString(),
+        type: "forward",
+        status: "success",
+        hash: result.hash,
+        tokenSymbol: deposit.tokenSymbol,
+        amount: String(deposit.amount),
+        sourceChainId: deposit.chainId,
+        destChainId: deposit.chainId,
+        recipient,
+      });
     } else {
       // Bridge from source chain to destination
       console.log(boxLine());
@@ -534,6 +549,19 @@ async function processWallet(record: SessionRecord): Promise<string[]> {
           `✅ ${c.boldGreen(`Bridge complete ${idx}`)} ${c.dim(`(${fmtMs(Date.now() - t2)})`)}`,
         ),
       );
+
+      // Record bridge in history
+      await addHistoryEntry(walletAddress, {
+        timestamp: new Date().toISOString(),
+        type: "bridge",
+        status: "success",
+        hash: result.hash,
+        tokenSymbol: deposit.tokenSymbol,
+        amount: String(deposit.amount),
+        sourceChainId: deposit.chainId,
+        destChainId,
+        recipient,
+      });
     }
 
     console.log(boxLine(`   ${kv("Hash", c.yellow(result.hash))}`));

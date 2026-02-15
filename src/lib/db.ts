@@ -84,10 +84,10 @@ function redis(): Redis {
   return _redis;
 }
 
-/** A single bridge/forward history entry stored per wallet. */
+/** A single bridge/forward/sweep history entry stored per wallet. */
 export type HistoryEntry = {
   timestamp: string;
-  type: "bridge" | "forward";
+  type: "bridge" | "forward" | "sweep";
   status: "success" | "error";
   hash?: string;
   error?: string;

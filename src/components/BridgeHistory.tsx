@@ -12,6 +12,7 @@ import {
   History,
   ArrowLeftRight,
   Send,
+  Wallet,
 } from "lucide-react";
 import { CHAIN_META, MEESCAN_URL } from "../constants";
 import { shortAddr } from "../utils";
@@ -22,7 +23,7 @@ import { formatUnits } from "viem";
 
 type HistoryEntry = {
   timestamp: string;
-  type: "bridge" | "forward";
+  type: "bridge" | "forward" | "sweep";
   status: "success" | "error";
   hash?: string;
   error?: string;
@@ -124,7 +125,7 @@ export function BridgeHistory() {
             <h2 className="history-title">Bridge History</h2>
             <p className="history-sub">
               {total > 0
-                ? `${total} bridge operation${total !== 1 ? "s" : ""} recorded`
+                ? `${total} operation${total !== 1 ? "s" : ""} recorded`
                 : "No operations recorded yet"}
             </p>
           </div>
@@ -191,18 +192,35 @@ export function BridgeHistory() {
                     <div className="history-entry-route">
                       {entry.type === "bridge" ? (
                         <ArrowLeftRight size={13} className="history-type-icon" />
+                      ) : entry.type === "sweep" ? (
+                        <Wallet size={13} className="history-type-icon" />
                       ) : (
                         <Send size={13} className="history-type-icon" />
                       )}
-                      <span className="history-chain-tag" style={{ borderColor: chainColor(entry.sourceChainId) }}>
-                        <span className="history-chain-dot" style={{ background: chainColor(entry.sourceChainId) }} />
-                        {chainLabel(entry.sourceChainId)}
-                      </span>
-                      <ArrowRight size={12} className="history-arrow" />
-                      <span className="history-chain-tag" style={{ borderColor: chainColor(entry.destChainId) }}>
-                        <span className="history-chain-dot" style={{ background: chainColor(entry.destChainId) }} />
-                        {chainLabel(entry.destChainId)}
-                      </span>
+                      {entry.type === "sweep" ? (
+                        <>
+                          <span className="history-chain-tag" style={{ borderColor: chainColor(entry.sourceChainId) }}>
+                            <span className="history-chain-dot" style={{ background: chainColor(entry.sourceChainId) }} />
+                            {chainLabel(entry.sourceChainId)}
+                          </span>
+                          <ArrowRight size={12} className="history-arrow" />
+                          <span className="history-detail-value history-detail-value--mono">
+                            {shortAddr(entry.recipient)}
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="history-chain-tag" style={{ borderColor: chainColor(entry.sourceChainId) }}>
+                            <span className="history-chain-dot" style={{ background: chainColor(entry.sourceChainId) }} />
+                            {chainLabel(entry.sourceChainId)}
+                          </span>
+                          <ArrowRight size={12} className="history-arrow" />
+                          <span className="history-chain-tag" style={{ borderColor: chainColor(entry.destChainId) }}>
+                            <span className="history-chain-dot" style={{ background: chainColor(entry.destChainId) }} />
+                            {chainLabel(entry.destChainId)}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     {/* Timestamp */}
