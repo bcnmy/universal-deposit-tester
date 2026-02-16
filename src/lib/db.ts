@@ -22,6 +22,7 @@ import { Redis } from "@upstash/redis";
 import { encryptPrivateKey, decryptPrivateKey } from "./encrypt";
 import { serialize, deserialize, reviveBigInts } from "./bigintJson";
 import { c, shortAddr, fmtBytes } from "./log";
+import { DEFAULT_FEE_COLLECTOR_ADDRESS } from "../config";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ export type ListeningConfig = {
   destChainId: number;
   recipientIsSelf: boolean;
   recipientAddr: string;
+  /** Token symbol the recipient should receive on the destination chain (e.g. "USDC"). Defaults to same as input token when omitted. */
+  recipientTokenSymbol?: string;
 };
 
 /**
@@ -103,6 +106,7 @@ export type HistoryEntry = {
 const sessionKey = (addr: string) => `session:${addr.toLowerCase()}`;
 const historyKey = (addr: string) => `history:${addr.toLowerCase()}`;
 const ACTIVE_SET = "sessions:active";
+const FEE_COLLECTOR_KEY = "config:feeCollectorAddress";
 
 // ── Internal: parse a raw Redis value into a SessionRecord ───────────
 
@@ -239,6 +243,27 @@ export async function getActiveAddresses(): Promise<string[]> {
 /** Decrypt the session private key from a stored record. */
 export function decryptSessionKey(record: SessionRecord): `0x${string}` {
   return decryptPrivateKey(record.encryptedKey) as `0x${string}`;
+}
+
+// ── Fee Collector API ─────────────────────────────────────────────────
+
+/**
+ * Returns the fee collector address.
+ * Falls back to `DEFAULT_FEE_COLLECTOR_ADDRESS` if not set in Redis.
+ */
+export async function getFeeCollectorAddress(): Promise<string> {
+  const addr = await redis().get<string>(FEE_COLLECTOR_KEY);
+  return addr || DEFAULT_FEE_COLLECTOR_ADDRESS;
+}
+
+/**
+ * Update the fee collector address in Redis.
+ */
+export async function setFeeCollectorAddress(address: string): Promise<void> {
+  await redis().set(FEE_COLLECTOR_KEY, address.toLowerCase());
+  console.log(
+    c.dim(`  🗄 Fee collector address updated to ${shortAddr(address)}`),
+  );
 }
 
 // ── History API ──────────────────────────────────────────────────────

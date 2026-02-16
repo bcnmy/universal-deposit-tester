@@ -8,8 +8,10 @@ import {
   Trash2,
   Loader2,
   CheckCircle2,
+  Timer,
 } from "lucide-react";
 import type { PipelineState } from "../hooks/usePipeline";
+import { useCronCountdown } from "../hooks/useCronCountdown";
 import { CHAIN_META } from "../constants";
 import { shortAddr } from "../utils";
 
@@ -19,6 +21,7 @@ interface Props {
 
 export function ListeningDashboard({ pipeline: p }: Props) {
   const destMeta = CHAIN_META[p.destChainId];
+  const countdown = useCronCountdown(p.serverRegistered);
 
   return (
     <section className="listening-section">
@@ -40,11 +43,19 @@ export function ListeningDashboard({ pipeline: p }: Props) {
               )}
             </span>
             <div>
-              <h2 className="listening-title">
-                {p.serverRegistered
-                  ? "Server Monitoring Active"
-                  : "Waiting for Server Registration"}
-              </h2>
+              <div className="listening-title-row">
+                <h2 className="listening-title">
+                  {p.serverRegistered
+                    ? "Server Monitoring Active"
+                    : "Waiting for Server Registration"}
+                </h2>
+                {p.serverRegistered && countdown !== null && (
+                  <span className="listening-countdown" title="Seconds until next server sweep">
+                    <Timer size={12} />
+                    <span className="listening-countdown-value">{countdown}s</span>
+                  </span>
+                )}
+              </div>
               <p className="listening-sub">
                 {p.serverRegistered ? (
                   <>
@@ -54,13 +65,24 @@ export function ListeningDashboard({ pipeline: p }: Props) {
                     {p.recipientIsSelf ? (
                       <>
                         Funds will be automatically bridged to{" "}
-                        <strong>{destMeta.name}</strong> via Across.
+                        <strong>{destMeta.name}</strong>
+                        {p.recipientTokenSymbol && (
+                          <>
+                            {" "}as <strong>{p.recipientTokenSymbol}</strong>
+                          </>
+                        )}
+                        {" "}via Across.
                       </>
                     ) : (
                       <>
                         Funds will be bridged to{" "}
-                        <strong>{destMeta.name}</strong> via Across and
-                        forwarded to your recipient.
+                        <strong>{destMeta.name}</strong>
+                        {p.recipientTokenSymbol && (
+                          <>
+                            {" "}as <strong>{p.recipientTokenSymbol}</strong>
+                          </>
+                        )}
+                        {" "}via Across and forwarded to your recipient.
                       </>
                     )}
                     <br />
@@ -116,9 +138,15 @@ export function ListeningDashboard({ pipeline: p }: Props) {
               </span>
             </div>
             <div className="listening-meta-row">
-              <span className="listening-meta-label">Tokens</span>
+              <span className="listening-meta-label">Monitored Tokens</span>
               <span className="listening-meta-value">
                 USDC · USDT · WETH
+              </span>
+            </div>
+            <div className="listening-meta-row">
+              <span className="listening-meta-label">Receive As</span>
+              <span className="listening-meta-value">
+                {p.recipientTokenSymbol ?? "Same as input"}
               </span>
             </div>
             <div className="listening-meta-row">

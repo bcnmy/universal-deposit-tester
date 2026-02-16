@@ -13,6 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { pollAllSessions } from "@/lib/pollAndBridge";
+import { recordCronHeartbeat } from "@/lib/cronHeartbeat";
 import { c } from "@/lib/log";
 
 export const maxDuration = 60; // seconds (Vercel Pro)
@@ -29,6 +30,7 @@ export async function GET(request: Request) {
 
   // ── Run the poll (all logging is handled by pollAllSessions) ───────
   try {
+    recordCronHeartbeat();
     const result = await pollAllSessions();
     return NextResponse.json(result);
   } catch (err) {

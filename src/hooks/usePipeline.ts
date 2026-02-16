@@ -26,7 +26,7 @@ import {
   deregisterServerSession,
   type SessionDetails,
 } from "../sessions/index";
-import { NEXUS_SINGLETON, SUPPORTED_CHAINS, getTransport } from "../config";
+import { NEXUS_SINGLETON, SUPPORTED_CHAINS, SESSION_VERSION, getTransport } from "../config";
 import { isValidAddress, deriveStatus } from "../utils";
 import type { Status, StepStatus } from "../types";
 
@@ -84,6 +84,9 @@ export function usePipeline() {
   // ─── Recipient ────────────────────────────────────────────────────
   const [recipientAddr, setRecipientAddr] = useState("");
   const [recipientIsSelf, setRecipientIsSelf] = useState(true);
+
+  // ─── Recipient token (defaults to undefined = same as input) ────
+  const [recipientTokenSymbol, setRecipientTokenSymbol] = useState<string | undefined>(undefined);
 
   // ─── Copy address ─────────────────────────────────────────────────
   const [copied, setCopied] = useState(false);
@@ -146,19 +149,38 @@ export function usePipeline() {
         setServerRegistered(registered);
 
         if (registered && status.listeningConfig) {
-          // Server has an active session — restore from server data
-          // and jump straight to the listening dashboard.
           const cfg = status.listeningConfig;
-
-          setDestChainId(cfg.destChainId);
-          setDestConfirmed(true);
-          setRecipientIsSelf(cfg.recipientIsSelf);
-          setRecipientAddr(cfg.recipientAddr);
+          const serverVersion = status.sessionVersion ?? 0;
 
           // Use session signer address from server if we don't have it locally
           if (status.sessionSignerAddress && !sessionSignerRef.current) {
             setSessionSignerAddress(status.sessionSignerAddress);
           }
+
+          if (serverVersion < SESSION_VERSION) {
+            // Stale session — permissions don't cover the latest features.
+            // Restore the config so it's pre-filled, then let the pipeline
+            // auto-advance to re-grant with updated permissions (v→v+1).
+            console.log(
+              `[usePipeline] Session v${serverVersion} → upgrading to v${SESSION_VERSION}`,
+            );
+            setDestChainId(cfg.destChainId);
+            setDestConfirmed(true);
+            setRecipientIsSelf(cfg.recipientIsSelf);
+            setRecipientAddr(cfg.recipientAddr);
+            setRecipientTokenSymbol(cfg.recipientTokenSymbol);
+            // Don't set isListening — pipeline auto-advance will re-grant,
+            // re-register with the new version, then enter listening mode.
+            return;
+          }
+
+          // Server has an active, up-to-date session — restore from
+          // server data and jump straight to the listening dashboard.
+          setDestChainId(cfg.destChainId);
+          setDestConfirmed(true);
+          setRecipientIsSelf(cfg.recipientIsSelf);
+          setRecipientAddr(cfg.recipientAddr);
+          setRecipientTokenSymbol(cfg.recipientTokenSymbol);
 
           setIsListening(true);
         }
@@ -476,6 +498,7 @@ export function usePipeline() {
     const savedDest = destChainId;
     const savedRecipientIsSelf = recipientIsSelf;
     const savedRecipientAddr = recipientAddr;
+    const savedRecipientTokenSymbol = recipientTokenSymbol;
 
     // 1. Deregister from server
     try {
@@ -514,11 +537,12 @@ export function usePipeline() {
     setDestChainId(savedDest);
     setRecipientIsSelf(savedRecipientIsSelf);
     setRecipientAddr(savedRecipientAddr);
+    setRecipientTokenSymbol(savedRecipientTokenSymbol);
     setDestConfirmed(true);
 
     setResetStatus("done");
     setTimeout(() => setResetStatus("idle"), 2000);
-  }, [embeddedWallet, destChainId, recipientIsSelf, recipientAddr]);
+  }, [embeddedWallet, destChainId, recipientIsSelf, recipientAddr, recipientTokenSymbol]);
 
   // ═══════════════════════════════════════════════════════════════════
   //  Transition to listening mode after setup completes.
@@ -528,32 +552,45 @@ export function usePipeline() {
 
   useEffect(() => {
     if (grantStatus === "success" && sessionDetails && destConfirmed && !isListening) {
-      // Register on the server (fire-and-forget — don't block the UI)
-      if (embeddedWallet && sessionSignerRef.current) {
-        const sessionKey = loadSessionKey(embeddedWallet.address);
-        if (sessionKey) {
-          registerSessionOnServer({
-            walletAddress: embeddedWallet.address,
-            sessionPrivateKey: sessionKey,
-            sessionSignerAddress: sessionSignerRef.current.address,
-            sessionDetails,
-            listeningConfig: { destChainId, recipientIsSelf, recipientAddr },
-          })
-            .then(() => {
-              setServerRegistered(true);
-              console.log("[server] Session registered for background monitoring");
-            })
-            .catch((err) =>
-              console.error("[server] Failed to register session:", err),
-            );
-        }
-      }
+      let cancelled = false;
 
-      // Small delay so the user can see step 7 complete
-      const timer = setTimeout(() => setIsListening(true), 800);
-      return () => clearTimeout(timer);
+      const registerAndListen = async () => {
+        // Register on the server — wait for it to complete before entering
+        // listening mode so the cron job always has the latest config.
+        if (embeddedWallet && sessionSignerRef.current) {
+          const sessionKey = loadSessionKey(embeddedWallet.address);
+          if (sessionKey) {
+            const config = { destChainId, recipientIsSelf, recipientAddr, recipientTokenSymbol };
+            console.log("[server] Registering session with config:", JSON.stringify(config));
+            try {
+              await registerSessionOnServer({
+                walletAddress: embeddedWallet.address,
+                sessionPrivateKey: sessionKey,
+                sessionSignerAddress: sessionSignerRef.current.address,
+                sessionDetails,
+                listeningConfig: config,
+              });
+              if (!cancelled) {
+                setServerRegistered(true);
+                console.log("[server] Session registered for background monitoring");
+              }
+            } catch (err) {
+              console.error("[server] Failed to register session:", err);
+            }
+          }
+        }
+
+        // Small delay so the user can see step 7 complete
+        if (!cancelled) {
+          await new Promise((r) => setTimeout(r, 800));
+          if (!cancelled) setIsListening(true);
+        }
+      };
+
+      registerAndListen();
+      return () => { cancelled = true; };
     }
-  }, [grantStatus, sessionDetails]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [grantStatus, sessionDetails, destChainId, recipientIsSelf, recipientAddr, recipientTokenSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ═══════════════════════════════════════════════════════════════════
   //  Auto-advance — each setup step triggers the next when it succeeds
@@ -604,7 +641,7 @@ export function usePipeline() {
     if (chainDropdownOpen && chainTriggerRef.current) {
       const rect = chainTriggerRef.current.getBoundingClientRect();
       setDropdownPos({
-        top: rect.bottom + 6,
+        top: rect.top - 6,
         left: rect.left + rect.width / 2,
       });
     }
@@ -710,6 +747,10 @@ export function usePipeline() {
     setRecipientAddr,
     recipientIsSelf,
     setRecipientIsSelf,
+
+    // Recipient token
+    recipientTokenSymbol,
+    setRecipientTokenSymbol,
 
     // Copy
     copied,

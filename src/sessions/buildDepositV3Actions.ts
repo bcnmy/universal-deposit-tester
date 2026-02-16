@@ -1,21 +1,34 @@
 import { getSudoPolicy } from "@biconomy/abstractjs";
 import { toFunctionSelector, getAbiItem, erc20Abi } from "viem";
-import { ACROSS_SPOKEPOOL, SUPPORTED_TOKENS, DEPOSIT_V3_ABI } from "../config";
+import {
+  ACROSS_SPOKEPOOL,
+  ACROSS_SPOKEPOOL_PERIPHERY,
+  SUPPORTED_TOKENS,
+  DEPOSIT_V3_ABI,
+  SWAP_API_DEPOSIT_SELECTOR,
+  SWAP_API_PERIPHERY_SELECTOR,
+} from "../config";
 
 /**
  * Build session permission actions for ALL supported tokens (USDC, USDT, WETH)
  * on the given chain IDs.
  *
  * For each chain we grant:
- *  - `approve` on every token address (so the SpokePool can spend it)
- *  - `depositV3` on the SpokePool (once per chain — same contract regardless of token)
+ *  - `approve` on every token address (so the SpokePool / Periphery can spend it)
+ *  - `transfer` on every token address (for fee collection + forward transfers)
+ *  - `depositV3` on the SpokePool (legacy, for direct calls)
+ *  - The Swap API deposit function on the SpokePool (same-token routes via Swap API)
+ *  - The swap+bridge function on the SpokePoolPeriphery (cross-token routes)
  */
 export function buildDepositV3Actions(chainIds: number[]) {
-  const depositSelector = toFunctionSelector(
+  const depositV3Selector = toFunctionSelector(
     getAbiItem({ abi: DEPOSIT_V3_ABI, name: "depositV3" })
   );
   const approveSelector = toFunctionSelector(
     getAbiItem({ abi: erc20Abi, name: "approve" })
+  );
+  const transferSelector = toFunctionSelector(
+    getAbiItem({ abi: erc20Abi, name: "transfer" })
   );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const actions: any[] = [];
@@ -28,7 +41,7 @@ export function buildDepositV3Actions(chainIds: number[]) {
     );
 
     for (const chainId of supported) {
-      // Allow approve on this token
+      // Allow approve on this token (covers both SpokePool and Periphery as spender)
       actions.push({
         actionTarget: token.addresses[chainId],
         actionTargetSelector: approveSelector,
@@ -36,14 +49,40 @@ export function buildDepositV3Actions(chainIds: number[]) {
         chainId,
       });
 
-      // Allow depositV3 on the SpokePool (once per chain)
+      // Allow transfer on this token (fee collection + forward transfers)
+      actions.push({
+        actionTarget: token.addresses[chainId],
+        actionTargetSelector: transferSelector,
+        actionPolicies: [getSudoPolicy()],
+        chainId,
+      });
+
+      // Per-chain permissions (added once regardless of token)
       if (!addedSpokepool.has(chainId)) {
+        // Allow depositV3 on the SpokePool (legacy direct calls)
         actions.push({
           actionTarget: ACROSS_SPOKEPOOL[chainId],
-          actionTargetSelector: depositSelector,
+          actionTargetSelector: depositV3Selector,
           actionPolicies: [getSudoPolicy()],
           chainId,
         });
+
+        // Allow the Swap API deposit function on the SpokePool (same-token routes)
+        actions.push({
+          actionTarget: ACROSS_SPOKEPOOL[chainId],
+          actionTargetSelector: SWAP_API_DEPOSIT_SELECTOR,
+          actionPolicies: [getSudoPolicy()],
+          chainId,
+        });
+
+        // Allow the swap+bridge function on the SpokePoolPeriphery (cross-token routes)
+        actions.push({
+          actionTarget: ACROSS_SPOKEPOOL_PERIPHERY,
+          actionTargetSelector: SWAP_API_PERIPHERY_SELECTOR,
+          actionPolicies: [getSudoPolicy()],
+          chainId,
+        });
+
         addedSpokepool.add(chainId);
       }
     }

@@ -10,7 +10,7 @@
  *  - sessionPrivateKey: string (0x-prefixed hex)
  *  - sessionSignerAddress: string
  *  - sessionDetails: object (the grant result — may contain __bigint: strings)
- *  - listeningConfig: { destChainId, recipientIsSelf, recipientAddr }
+ *  - listeningConfig: { destChainId, recipientIsSelf, recipientAddr, recipientTokenSymbol? }
  *  - sessionVersion: number
  */
 
@@ -43,16 +43,19 @@ export async function POST(request: Request) {
         destChainId: number;
         recipientIsSelf: boolean;
         recipientAddr: string;
+        recipientTokenSymbol?: string;
       };
       sessionVersion: number;
     };
 
     const lc = listeningConfig;
+    const tokenTag = lc?.recipientTokenSymbol ? ` token=${lc.recipientTokenSymbol}` : " token=same-as-input";
     console.log(
       `\n  📝 ${c.boldBlue("REGISTER")} ${c.cyan(shortAddr(walletAddress))}` +
         `  signer=${c.cyan(shortAddr(sessionSignerAddress))}` +
         `  v=${sessionVersion}` +
         `  dest=${lc?.destChainId}` +
+        tokenTag +
         `  recipient=${lc?.recipientIsSelf ? "self" : shortAddr(lc?.recipientAddr)}`,
     );
 

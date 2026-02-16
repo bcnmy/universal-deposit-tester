@@ -13,6 +13,8 @@ import {
   LogOut,
   AlertTriangle,
   Bomb,
+  Settings,
+  Save,
 } from "lucide-react";
 
 // ── Hardcoded admin address ──────────────────────────────────────────
@@ -91,6 +93,12 @@ export default function AdminPage() {
   const [nukeConfirm, setNukeConfirm] = useState(false);
   const [nukeResult, setNukeResult] = useState<string | null>(null);
   const [step, setStep] = useState<"connect" | "sign" | "dashboard">("connect");
+
+  // ── Settings state ────────────────────────────────────────────────
+  const [feeCollectorAddress, setFeeCollectorAddress] = useState("");
+  const [feeCollectorInput, setFeeCollectorInput] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   // ── Connect wallet ──────────────────────────────────────────────
   const handleConnect = useCallback(async () => {
@@ -208,6 +216,56 @@ export default function AdminPage() {
     }
   }, [auth]);
 
+  // ── Fetch settings ─────────────────────────────────────────────
+  const fetchSettings = useCallback(async () => {
+    if (!auth) return;
+    try {
+      const res = await fetch("/api/admin/settings", {
+        headers: {
+          "x-admin-signature": auth.signature,
+          "x-admin-message": auth.message,
+          "x-admin-address": auth.address,
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setFeeCollectorAddress(data.feeCollectorAddress ?? "");
+      setFeeCollectorInput(data.feeCollectorAddress ?? "");
+    } catch (err) {
+      console.error("Failed to fetch settings:", err);
+    }
+  }, [auth]);
+
+  // ── Save fee collector address ────────────────────────────────
+  const handleSaveSettings = useCallback(async () => {
+    if (!auth) return;
+    setSavingSettings(true);
+    setSettingsSaved(false);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-signature": auth.signature,
+          "x-admin-message": auth.message,
+          "x-admin-address": auth.address,
+        },
+        body: JSON.stringify({ feeCollectorAddress: feeCollectorInput }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setFeeCollectorAddress(data.feeCollectorAddress ?? feeCollectorInput);
+      setFeeCollectorInput(data.feeCollectorAddress ?? feeCollectorInput);
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save settings");
+    } finally {
+      setSavingSettings(false);
+    }
+  }, [auth, feeCollectorInput]);
+
   // ── Disconnect ─────────────────────────────────────────────────
   const handleDisconnect = useCallback(() => {
     setWalletAddress(null);
@@ -219,8 +277,11 @@ export default function AdminPage() {
 
   // Auto-fetch when authed
   useEffect(() => {
-    if (auth) fetchSessions();
-  }, [auth, fetchSessions]);
+    if (auth) {
+      fetchSessions();
+      fetchSettings();
+    }
+  }, [auth, fetchSessions, fetchSettings]);
 
   return (
     <div className="admin-page">
@@ -409,6 +470,59 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+
+          {/* ── Settings: Fee Collector ─────────────────────── */}
+          <div className="admin-settings-section">
+            <div className="admin-settings-header">
+              <div className="admin-settings-title-row">
+                <Settings size={18} />
+                <h2 className="admin-settings-title">Settings</h2>
+              </div>
+              <p className="admin-settings-desc">
+                Configure the fee collector address for cross-token bridge fees (10 bps).
+                Caps: 20 USDC, 20 USDT, 0.01 WETH per transfer.
+              </p>
+            </div>
+
+            <div className="admin-settings-field">
+              <label className="admin-settings-label" htmlFor="feeCollector">
+                Fee Collector Address
+              </label>
+              <div className="admin-settings-input-row">
+                <input
+                  id="feeCollector"
+                  type="text"
+                  className="admin-settings-input"
+                  value={feeCollectorInput}
+                  onChange={(e) => setFeeCollectorInput(e.target.value)}
+                  placeholder="0x…"
+                  spellCheck={false}
+                />
+                <button
+                  className="admin-settings-save-btn"
+                  onClick={handleSaveSettings}
+                  disabled={
+                    savingSettings ||
+                    feeCollectorInput.toLowerCase() === feeCollectorAddress.toLowerCase()
+                  }
+                >
+                  {savingSettings ? (
+                    <RefreshCw size={14} className="icon-spin" />
+                  ) : settingsSaved ? (
+                    <CheckCircle size={14} />
+                  ) : (
+                    <Save size={14} />
+                  )}
+                  {savingSettings ? "Saving…" : settingsSaved ? "Saved" : "Save"}
+                </button>
+              </div>
+              {feeCollectorAddress && (
+                <p className="admin-settings-current">
+                  Current: <code>{feeCollectorAddress}</code>
+                </p>
+              )}
+            </div>
+          </div>
 
           {/* ── Danger zone: Nuke all data ─────────────────── */}
           <div className="admin-nuke-section">

@@ -47,6 +47,8 @@ export type ListeningConfig = {
   destChainId: number;
   recipientIsSelf: boolean;
   recipientAddr: string;
+  /** Token symbol the recipient should receive on the destination chain (e.g. "USDC"). Defaults to same as input token when omitted. */
+  recipientTokenSymbol?: string;
 };
 
 // ── Clear local session data ─────────────────────────────────────────
@@ -108,6 +110,7 @@ export async function reconfigureServerSession(
   patch: {
     listeningConfig?: ListeningConfig;
     sessionDetails?: SessionDetails;
+    sessionVersion?: number;
     active?: boolean;
   },
 ): Promise<void> {

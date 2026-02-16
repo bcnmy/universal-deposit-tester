@@ -47,6 +47,8 @@ export function Pipeline({ pipeline: p }: PipelineProps) {
             setRecipientAddr={p.setRecipientAddr}
             recipientIsSelf={p.recipientIsSelf}
             setRecipientIsSelf={p.setRecipientIsSelf}
+            recipientTokenSymbol={p.recipientTokenSymbol}
+            setRecipientTokenSymbol={p.setRecipientTokenSymbol}
             walletAddress={p.embeddedWallet?.address}
             stepRef={ref(1)}
           />

@@ -31,6 +31,7 @@ import {
   SUPPORTED_TOKENS,
   SUPPORTED_CHAINS,
   BICONOMY_API_KEY,
+  SESSION_VERSION,
   getTransport,
 } from "../config";
 import {
@@ -47,6 +48,7 @@ import {
   updateSession,
   decryptSessionKey,
   addHistoryEntry,
+  getFeeCollectorAddress,
   type SessionRecord,
 } from "./db";
 import { executeDepositV3 } from "../sessions/executeDepositV3";
@@ -303,11 +305,19 @@ type WalletExecResult = {
 
 async function executeWalletActions(
   scan: WalletScan,
+  feeCollectorAddress: Address,
 ): Promise<WalletExecResult> {
   const { record, actionableDeposits } = scan;
   const walletAddress = record.walletAddress as Address;
-  const { destChainId, recipientIsSelf, recipientAddr } =
+  const { destChainId, recipientIsSelf, recipientAddr, recipientTokenSymbol } =
     record.listeningConfig;
+
+  console.log(
+    `  [exec] ${c.cyan(shortAddr(walletAddress))} ` +
+      `recipientTokenSymbol=${recipientTokenSymbol ?? "(undefined → same-as-input)"} ` +
+      `dest=${chainName(destChainId)} ` +
+      `deposits=${actionableDeposits.length}`,
+  );
 
   const successes: ActionSuccess[] = [];
   const failures: ActionFailure[] = [];
@@ -362,6 +372,8 @@ async function executeWalletActions(
           destinationChainId: destChainId,
           amount: deposit.amount,
           tokenSymbol: deposit.tokenSymbol,
+          outputTokenSymbol: recipientTokenSymbol,
+          feeCollectorAddress,
         });
       }
 
@@ -457,13 +469,38 @@ export async function pollAllSessions(): Promise<PollResult> {
     })),
   );
 
-  const activeRecords = recordPairs.filter(
+  const allActive = recordPairs.filter(
     (p): p is { addr: string; record: SessionRecord } =>
       p.record !== null && p.record !== undefined && p.record.active,
   );
 
-  if (activeRecords.length === 0) {
+  if (allActive.length === 0) {
     console.log(`\n  ${c.dim("No active sessions — nothing to do")}`);
+    console.log(footer());
+    return { processed: 0, bridged: [], errors: [] };
+  }
+
+  // Filter out sessions with stale permission sets
+  const staleRecords = allActive.filter(
+    (p) => (p.record.sessionVersion ?? 0) < SESSION_VERSION,
+  );
+  const activeRecords = allActive.filter(
+    (p) => (p.record.sessionVersion ?? 0) >= SESSION_VERSION,
+  );
+
+  if (staleRecords.length > 0) {
+    console.log(
+      `\n  ⚠️  ${c.boldYellow(`${staleRecords.length} session(s) skipped — stale permission set (need v${SESSION_VERSION}):`)}`,
+    );
+    for (const { addr, record } of staleRecords) {
+      console.log(
+        `    ${c.yellow("↳")} ${c.cyan(shortAddr(addr))}  v${record.sessionVersion ?? "?"}  — user must re-setup session`,
+      );
+    }
+  }
+
+  if (activeRecords.length === 0) {
+    console.log(`\n  ${c.dim("No sessions with current permissions — nothing to do")}`);
     console.log(footer());
     return { processed: 0, bridged: [], errors: [] };
   }
@@ -511,14 +548,15 @@ export async function pollAllSessions(): Promise<PollResult> {
 
   for (const scan of walletScans) {
     const { addr, record, checkResult, actionableDeposits } = scan;
-    const { destChainId, recipientIsSelf, recipientAddr } =
+    const { destChainId, recipientIsSelf, recipientAddr, recipientTokenSymbol: rts } =
       record.listeningConfig;
     const recipientDisplay = recipientIsSelf
       ? "self"
       : shortAddr(recipientAddr);
+    const tokenTag = rts ? ` [${rts}]` : "";
 
     const addrStr = c.cyan(shortAddr(addr));
-    const destStr = `→ ${chainName(destChainId)} (${recipientDisplay})`;
+    const destStr = `→ ${chainName(destChainId)}${tokenTag} (${recipientDisplay})`;
 
     if (checkResult.entries.length === 0) {
       // No balances at all
@@ -580,14 +618,18 @@ export async function pollAllSessions(): Promise<PollResult> {
     return result;
   }
 
+  // Fetch fee collector address once for the entire poll cycle
+  const feeCollectorAddr = (await getFeeCollectorAddress()) as Address;
+
   console.log(
-    `\n  ⚡ Executing ${c.bold(String(walletsNeedingAction.length))} wallet(s) in parallel…\n`,
+    `\n  ⚡ Executing ${c.bold(String(walletsNeedingAction.length))} wallet(s) in parallel…` +
+      `  ${c.dim(`fee collector: ${shortAddr(feeCollectorAddr)}`)}\n`,
   );
 
   const execStart = Date.now();
 
   const execResults = await Promise.allSettled(
-    walletsNeedingAction.map((scan) => executeWalletActions(scan)),
+    walletsNeedingAction.map((scan) => executeWalletActions(scan, feeCollectorAddr)),
   );
 
   const execElapsed = Date.now() - execStart;

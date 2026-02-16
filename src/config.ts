@@ -47,6 +47,20 @@ export const ACROSS_SPOKEPOOL: Record<number, Address> = {
   [arbitrum.id]: "0xe35e9842fceaca96570b734083f4a58e8f7c5f2a",
 };
 
+// ─── Across SpokePoolPeriphery (used for cross-token swap+bridge) ───
+// Same address deployed on all supported chains.
+export const ACROSS_SPOKEPOOL_PERIPHERY: Address =
+  "0x767e4c20F521a829dE4Ffc40C25176676878147f";
+
+// ─── Swap API function selectors ────────────────────────────────────
+// The Swap API returns calldata targeting either the SpokePool (same-token)
+// or the SpokePoolPeriphery (cross-token). These are the function selectors
+// used by the Swap API that we need in our session permissions.
+/** Selector for the deposit function used by the Swap API on the SpokePool */
+export const SWAP_API_DEPOSIT_SELECTOR = "0xad5425c6" as const;
+/** Selector for the swap+bridge function on SpokePoolPeriphery */
+export const SWAP_API_PERIPHERY_SELECTOR = "0x110560ad" as const;
+
 // ─── Token Addresses ─────────────────────────────────────────────────
 export const USDC: Record<number, Address> = {
   [optimism.id]: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
@@ -85,11 +99,29 @@ export const SUPPORTED_TOKENS: Record<string, TokenConfig> = {
 
 export const TOKEN_SYMBOLS = Object.keys(SUPPORTED_TOKENS) as string[];
 
+// ─── Fee Configuration ──────────────────────────────────────────────
+/** Default fee collector address (used when the DB has no override) */
+export const DEFAULT_FEE_COLLECTOR_ADDRESS: Address =
+  "0x6CC236D96C1f02916D469dba37c52550ba0821FF";
+
+/** Fee in basis points charged on cross-token bridges (10 bps = 0.1%) */
+export const FEE_BPS = 10n;
+
+/**
+ * Maximum fee per transfer, per token.
+ * Caps the 10 bps fee so large bridges don't generate outsized fees.
+ */
+export const MAX_FEE_AMOUNTS: Record<string, bigint> = {
+  USDC: 20_000_000n, // 20 USDC  (6 decimals)
+  USDT: 20_000_000n, // 20 USDT  (6 decimals)
+  WETH: 10_000_000_000_000_000n, // 0.01 WETH (18 decimals)
+};
+
 // ─── Session Version ─────────────────────────────────────────────────
 // Bump this whenever the session permission scope changes (e.g. new tokens,
 // policy address changes) so that existing stored sessions are invalidated
 // and users must re-enable.
-export const SESSION_VERSION = 4;
+export const SESSION_VERSION = 6;
 
 // ─── Biconomy API Key (for MEE service authentication) ──────────────
 export const BICONOMY_API_KEY =
