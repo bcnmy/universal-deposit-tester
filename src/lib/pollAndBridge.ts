@@ -57,10 +57,14 @@ import type { SessionDetails } from "../sessions/types";
 
 // ── Constants ────────────────────────────────────────────────────────
 
+/** Symbol used internally for native ETH deposits (not an ERC-20 token) */
+const NATIVE_ETH_SYMBOL = "ETH";
+
 const MIN_BRIDGE_AMOUNTS: Record<string, bigint> = {
   USDC: 100_000n,
   USDT: 100_000n,
   WETH: 10_000_000_000_000n,
+  [NATIVE_ETH_SYMBOL]: 10_000_000_000_000n, // 0.00001 ETH
 };
 const DEFAULT_MIN_BRIDGE = 100_000n;
 
@@ -88,6 +92,7 @@ function chainName(id: number): string {
 }
 
 function fmtToken(amount: bigint, symbol: string): string {
+  if (symbol === NATIVE_ETH_SYMBOL) return `${formatUnits(amount, 18)} ${symbol}`;
   const token = SUPPORTED_TOKENS[symbol];
   if (!token) return `${amount} ${symbol}`;
   return `${formatUnits(amount, token.decimals)} ${symbol}`;
@@ -258,6 +263,47 @@ async function checkBalances(
           }),
       );
     }
+
+    // Check native ETH balance (will be wrapped to WETH before bridging)
+    const ethMin = MIN_BRIDGE_AMOUNTS[NATIVE_ETH_SYMBOL] ?? DEFAULT_MIN_BRIDGE;
+    checks.push(
+      client
+        .getBalance({ address: walletAddress })
+        .then((balance) => {
+          if (balance > 0n) {
+            const aboveThreshold = balance >= ethMin;
+            entries.push({
+              chainId,
+              chainLabel: chainName(chainId),
+              tokenSymbol: NATIVE_ETH_SYMBOL,
+              balance,
+              formatted: formatUnits(balance, 18),
+              threshold: formatUnits(ethMin, 18),
+              aboveThreshold,
+            });
+
+            if (aboveThreshold) {
+              deposits.push({
+                chainId,
+                tokenSymbol: NATIVE_ETH_SYMBOL,
+                amount: balance,
+              });
+            }
+          }
+        })
+        .catch((err) => {
+          entries.push({
+            chainId,
+            chainLabel: chainName(chainId),
+            tokenSymbol: NATIVE_ETH_SYMBOL,
+            balance: 0n,
+            formatted: "ERR",
+            threshold: formatUnits(ethMin, 18),
+            aboveThreshold: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }),
+    );
   }
 
   await Promise.all(checks);
@@ -352,16 +398,35 @@ async function executeWalletActions(
     try {
       let result: { hash: string };
 
+      const isNativeETH = deposit.tokenSymbol === NATIVE_ETH_SYMBOL;
+
       if (isOnDestChain) {
-        result = await executeForwardTransfer({
-          sessionMeeClient,
-          sessionDetails,
-          walletAddress,
-          recipient,
-          chainId: deposit.chainId,
-          amount: deposit.amount,
-          tokenSymbol: deposit.tokenSymbol,
-        });
+        if (isNativeETH) {
+          // Native ETH on dest chain: wrap to WETH, then forward as WETH
+          result = await executeDepositV3({
+            sessionMeeClient,
+            sessionDetails,
+            walletAddress,
+            recipient,
+            sourceChainId: deposit.chainId,
+            destinationChainId: deposit.chainId,
+            amount: deposit.amount,
+            tokenSymbol: "WETH",
+            outputTokenSymbol: recipientTokenSymbol,
+            feeCollectorAddress,
+            wrapNativeETH: true,
+          });
+        } else {
+          result = await executeForwardTransfer({
+            sessionMeeClient,
+            sessionDetails,
+            walletAddress,
+            recipient,
+            chainId: deposit.chainId,
+            amount: deposit.amount,
+            tokenSymbol: deposit.tokenSymbol,
+          });
+        }
       } else {
         result = await executeDepositV3({
           sessionMeeClient,
@@ -371,9 +436,10 @@ async function executeWalletActions(
           sourceChainId: deposit.chainId,
           destinationChainId: destChainId,
           amount: deposit.amount,
-          tokenSymbol: deposit.tokenSymbol,
+          tokenSymbol: isNativeETH ? "WETH" : deposit.tokenSymbol,
           outputTokenSymbol: recipientTokenSymbol,
           feeCollectorAddress,
+          wrapNativeETH: isNativeETH,
         });
       }
 

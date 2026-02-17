@@ -5,7 +5,10 @@ import {
   encodeFunctionData,
   erc20Abi,
 } from "viem";
-import { SUPPORTED_TOKENS, FEE_BPS, MAX_FEE_AMOUNTS } from "../config";
+import { SUPPORTED_TOKENS, WETH, FEE_BPS, MAX_FEE_AMOUNTS } from "../config";
+
+/** WETH deposit() selector — wraps native ETH into WETH (no arguments) */
+const WETH_DEPOSIT_SELECTOR: Hex = "0xd0e30db0";
 import { ScheduledExecutionBounds } from "./getScheduledExecutionBounds";
 import type { SessionDetails } from "./types";
 
@@ -98,6 +101,12 @@ export type ExecuteDepositV3Params = {
   outputTokenSymbol?: string;
   /** Fee collector address. When set and bridge is cross-token, a 10 bps fee is transferred here. */
   feeCollectorAddress?: Address;
+  /**
+   * When true, the account holds native ETH that must be wrapped into WETH
+   * before bridging. A WETH `deposit()` call is prepended to the calls array.
+   * `tokenSymbol` should be "WETH" when this is set.
+   */
+  wrapNativeETH?: boolean;
 };
 
 /**
@@ -131,6 +140,7 @@ export async function executeDepositV3(
     tokenSymbol = "USDC",
     outputTokenSymbol,
     feeCollectorAddress,
+    wrapNativeETH = false,
   } = params;
 
   const effectiveOutputSymbol = outputTokenSymbol ?? tokenSymbol;
@@ -201,6 +211,22 @@ export async function executeDepositV3(
   // collector before the approval + bridge calls.
 
   const calls: { to: Address; data: Hex; value: bigint }[] = [];
+
+  // Wrap native ETH → WETH before bridging
+  if (wrapNativeETH) {
+    const wethAddr = WETH[sourceChainId];
+    if (!wethAddr) {
+      throw new Error(`WETH not available on chain ${sourceChainId}`);
+    }
+    console.log(
+      `[executeDepositV3] Wrapping ${amount} native ETH → WETH on chain ${sourceChainId}`,
+    );
+    calls.push({
+      to: wethAddr,
+      data: WETH_DEPOSIT_SELECTOR,
+      value: amount,
+    });
+  }
 
   // Prepend fee transfer for cross-token bridges
   if (feeAmount > 0n && feeCollectorAddress) {

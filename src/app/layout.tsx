@@ -8,9 +8,18 @@ import "../App.css"; // Component styles
 
 /* ── Metadata ───────────────────────────────────────────────────────── */
 export const metadata: Metadata = {
-  title: "Nexus Bridge",
+  title: "Nexus • Universal Deposit Address",
   description:
     "Auto-bridge deposits across chains using Biconomy smart sessions",
+  icons: {
+    icon: [
+      { url: "/images/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/images/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [
+      { url: "/images/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export const viewport: Viewport = {

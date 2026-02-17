@@ -7,7 +7,11 @@ import {
   DEPOSIT_V3_ABI,
   SWAP_API_DEPOSIT_SELECTOR,
   SWAP_API_PERIPHERY_SELECTOR,
+  WETH,
 } from "../config";
+
+/** WETH deposit() selector — wraps native ETH into WETH (no arguments) */
+const WETH_DEPOSIT_SELECTOR = "0xd0e30db0" as const;
 
 /**
  * Build session permission actions for ALL supported tokens (USDC, USDT, WETH)
@@ -82,6 +86,17 @@ export function buildDepositV3Actions(chainIds: number[]) {
           actionPolicies: [getSudoPolicy()],
           chainId,
         });
+
+        // Allow deposit() on the WETH contract (wraps native ETH → WETH)
+        const wethAddr = WETH[chainId];
+        if (wethAddr) {
+          actions.push({
+            actionTarget: wethAddr,
+            actionTargetSelector: WETH_DEPOSIT_SELECTOR,
+            actionPolicies: [getSudoPolicy()],
+            chainId,
+          });
+        }
 
         addedSpokepool.add(chainId);
       }

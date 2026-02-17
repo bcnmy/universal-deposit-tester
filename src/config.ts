@@ -121,7 +121,7 @@ export const MAX_FEE_AMOUNTS: Record<string, bigint> = {
 // Bump this whenever the session permission scope changes (e.g. new tokens,
 // policy address changes) so that existing stored sessions are invalidated
 // and users must re-enable.
-export const SESSION_VERSION = 6;
+export const SESSION_VERSION = 7;
 
 // ─── Biconomy API Key (for MEE service authentication) ──────────────
 export const BICONOMY_API_KEY =

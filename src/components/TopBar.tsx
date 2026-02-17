@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowLeftRight, Check, Copy, History, LayoutDashboard, LogOut, Wallet } from "lucide-react";
+import Image from "next/image";
+import { Check, Copy, History, LayoutDashboard, LogOut, Wallet } from "lucide-react";
 import { shortAddr } from "../utils";
 
 export type AppTab = "overview" | "manage" | "history";
@@ -30,7 +31,13 @@ export function TopBar({
     <nav className="topbar">
       <div className="topbar-brand">
         <span className="brand-icon">
-          <ArrowLeftRight size={16} />
+          <Image
+            src="/images/logo-32.png"
+            alt="Nexus Bridge"
+            width={30}
+            height={30}
+            priority
+          />
         </span>
         <span className="brand-name">Nexus Bridge</span>
       </div>
