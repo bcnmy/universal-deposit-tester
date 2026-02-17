@@ -74,9 +74,10 @@ export function BridgeHistory() {
 
   function formatAmount(amount: string, symbol: string): string {
     const token = SUPPORTED_TOKENS[symbol];
-    if (!token) return `${amount} ${symbol}`;
+    const decimals = token?.decimals ?? (symbol === "ETH" ? 18 : undefined);
+    if (decimals == null) return `${amount} ${symbol}`;
     try {
-      return `${formatUnits(BigInt(amount), token.decimals)} ${symbol}`;
+      return `${formatUnits(BigInt(amount), decimals)} ${symbol}`;
     } catch {
       return `${amount} ${symbol}`;
     }
