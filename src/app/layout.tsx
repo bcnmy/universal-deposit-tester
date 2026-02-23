@@ -8,7 +8,7 @@ import "../App.css"; // Component styles
 
 /* ── Metadata ───────────────────────────────────────────────────────── */
 export const metadata: Metadata = {
-  title: "Nexus • Universal Deposit Address",
+  title: "Universal Deposit Address",
   description:
     "Auto-bridge deposits across chains using Biconomy smart sessions",
   icons: {
