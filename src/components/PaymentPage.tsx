@@ -40,7 +40,7 @@ export function PaymentPage({ address }: PaymentPageProps) {
         <span className="brand-icon">
           <ArrowLeftRight size={16} />
         </span>
-        <span className="brand-name">Nexus Bridge</span>
+        <span className="brand-name">Universal Deposit Address</span>
       </div>
 
       {/* Card */}

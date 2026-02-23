@@ -1,4 +1,4 @@
-# Nexus Bridge
+# Universal Deposit Address
 
 Automated cross-chain token bridging using **Biconomy Smart Sessions** (EIP-7702) and **Across Protocol V3**. Users connect a Privy embedded wallet, delegate it to a Nexus smart account, grant session permissions, and the server continuously polls for incoming deposits and bridges them to a chosen destination chain.
 

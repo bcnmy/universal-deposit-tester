@@ -122,7 +122,7 @@ export default function AdminPage() {
     if (!walletAddress) return;
     setError(null);
     try {
-      const message = `Nexus Bridge Admin Access | Timestamp: ${Date.now()}`;
+      const message = `Universal Deposit Address Admin Access | Timestamp: ${Date.now()}`;
       const signature = await signMessage(message, walletAddress);
       setAuth({ address: walletAddress, message, signature });
       setStep("dashboard");

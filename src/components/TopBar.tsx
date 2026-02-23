@@ -33,13 +33,13 @@ export function TopBar({
         <span className="brand-icon">
           <Image
             src="/images/logo-32.png"
-            alt="Nexus Bridge"
+            alt="Universal Deposit Address"
             width={30}
             height={30}
             priority
           />
         </span>
-        <span className="brand-name">Nexus Bridge</span>
+        <span className="brand-name">Universal Deposit Address</span>
       </div>
 
       {authenticated && (

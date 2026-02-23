@@ -18,6 +18,7 @@ export function Providers({ children }: { children: ReactNode }) {
       appId={privyAppId}
       config={{
         appearance: { theme: "dark" },
+        loginMethods: ["email", "passkey"],
         supportedChains: [optimism, base, polygon, arbitrum],
         embeddedWallets: {
           ethereum: { createOnLogin: "all-users" },
