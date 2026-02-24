@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import QRCode from "react-qr-code";
+import Image from "next/image";
 import { ArrowLeftRight, Copy, Check, ExternalLink } from "lucide-react";
 import { CHAIN_META } from "../constants";
 import { SUPPORTED_CHAINS, TOKEN_SYMBOLS } from "../config";
@@ -38,9 +39,19 @@ export function PaymentPage({ address }: PaymentPageProps) {
       {/* Brand */}
       <div className="pay-brand">
         <span className="brand-icon">
-          <ArrowLeftRight size={16} />
+          <ArrowLeftRight size={14} />
         </span>
         <span className="brand-name">Universal Deposit Address</span>
+        <span className="brand-divider" aria-hidden="true" />
+        <span className="brand-by">
+          by
+          <Image
+            src="/images/biconomy-logo.svg"
+            alt="Biconomy"
+            width={72}
+            height={14}
+          />
+        </span>
       </div>
 
       {/* Card */}

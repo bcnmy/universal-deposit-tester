@@ -34,12 +34,23 @@ export function TopBar({
           <Image
             src="/images/logo.svg"
             alt="Universal Deposit Address"
-            width={30}
-            height={30}
+            width={24}
+            height={24}
             priority
           />
         </span>
         <span className="brand-name">Universal Deposit Address</span>
+        <span className="brand-divider" aria-hidden="true" />
+        <span className="brand-by">
+          by
+          <Image
+            src="/images/biconomy-logo.svg"
+            alt="Biconomy"
+            width={72}
+            height={14}
+            priority
+          />
+        </span>
       </div>
 
       {authenticated && (
