@@ -11,10 +11,16 @@ const SITE_TITLE = "Universal Deposit Address";
 const SITE_DESCRIPTION =
   "Receive funds on any chain and have them automatically bridged to your destination. Powered by Biconomy & Across.";
 
+function getSiteUrl(): string {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL)
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL ?? "https://universal-deposit-address.vercel.app",
-  ),
+  metadataBase: new URL(getSiteUrl()),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   icons: {
