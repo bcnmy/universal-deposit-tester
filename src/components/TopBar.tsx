@@ -32,7 +32,7 @@ export function TopBar({
       <div className="topbar-brand">
         <span className="brand-icon">
           <Image
-            src="/images/logo-32.png"
+            src="/images/logo.svg"
             alt="Universal Deposit Address"
             width={30}
             height={30}
