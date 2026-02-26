@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, type RefObject } from "react";
 import { Check, ChevronDown } from "lucide-react";
+import posthog from "posthog-js";
 import type { StepStatus } from "../../types";
 import { shortAddr, isValidAddress } from "../../utils";
 import { CHAIN_META, DEST_CHAINS } from "../../constants";
@@ -304,7 +305,15 @@ function DestinationForm({
       <div className="btn-continue-wrap">
         <button
           className="btn-continue-full"
-          onClick={() => setDestConfirmed(true)}
+          onClick={() => {
+            setDestConfirmed(true);
+            posthog.capture("destination_confirmed", {
+              dest_chain_id: destChainId,
+              dest_chain_name: CHAIN_META[destChainId]?.name,
+              recipient_is_self: recipientIsSelf,
+              recipient_token_symbol: recipientTokenSymbol ?? "same_as_input",
+            });
+          }}
           disabled={
             status === "pending" ||
             (!recipientIsSelf && !isValidAddress(recipientAddr))

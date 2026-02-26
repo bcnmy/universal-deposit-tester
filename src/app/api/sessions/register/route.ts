@@ -18,6 +18,7 @@ import { NextResponse } from "next/server";
 import { registerSession } from "@/lib/db";
 import { deserialize } from "@/lib/bigintJson";
 import { c, shortAddr, fmtMs } from "@/lib/log";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 export async function POST(request: Request) {
   const startTime = Date.now();
@@ -93,6 +94,21 @@ export async function POST(request: Request) {
       sessionDetails,
       listeningConfig,
       sessionVersion,
+    });
+
+    // Track server-side session registration
+    const posthog = getPostHogClient();
+    posthog.capture({
+      distinctId: walletAddress,
+      event: "session_registered",
+      properties: {
+        wallet_address: walletAddress,
+        session_version: sessionVersion,
+        dest_chain_id: listeningConfig.destChainId,
+        recipient_is_self: listeningConfig.recipientIsSelf,
+        recipient_token_symbol: listeningConfig.recipientTokenSymbol ?? "same_as_input",
+        source: "api",
+      },
     });
 
     console.log(

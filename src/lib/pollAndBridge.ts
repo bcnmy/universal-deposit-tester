@@ -54,6 +54,7 @@ import {
 import { executeDepositV3 } from "../sessions/executeDepositV3";
 import { executeForwardTransfer } from "../sessions/executeForwardTransfer";
 import type { SessionDetails } from "../sessions/types";
+import { getPostHogClient } from "./posthog-server";
 
 // ── Constants ────────────────────────────────────────────────────────
 
@@ -454,6 +455,27 @@ async function executeWalletActions(
         meescanUrl: `https://meescan.biconomy.io/details/${result.hash}`,
       });
 
+      // Track bridge_executed in PostHog
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: walletAddress as string,
+        event: "bridge_executed",
+        properties: {
+          wallet_address: walletAddress as string,
+          type,
+          token_symbol: deposit.tokenSymbol,
+          amount: amountStr,
+          source_chain: sourceChain,
+          source_chain_id: deposit.chainId,
+          dest_chain: destChain,
+          dest_chain_id: destChainId,
+          tx_hash: result.hash,
+          meescan_url: `https://meescan.biconomy.io/details/${result.hash}`,
+          recipient_is_self: recipientIsSelf,
+          source: "cron",
+        },
+      });
+
       // Record in history
       await addHistoryEntry(walletAddress, {
         timestamp: new Date().toISOString(),
@@ -487,6 +509,26 @@ async function executeWalletActions(
         sourceChain,
         destChain,
         error: msg,
+      });
+
+      // Track bridge_failed in PostHog
+      const posthog = getPostHogClient();
+      posthog.capture({
+        distinctId: walletAddress as string,
+        event: "bridge_failed",
+        properties: {
+          wallet_address: walletAddress as string,
+          type,
+          token_symbol: deposit.tokenSymbol,
+          amount: amountStr,
+          source_chain: sourceChain,
+          source_chain_id: deposit.chainId,
+          dest_chain: destChain,
+          dest_chain_id: destChainId,
+          error: msg,
+          recipient_is_self: recipientIsSelf,
+          source: "cron",
+        },
       });
 
       // Record failure in history

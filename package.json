@@ -18,6 +18,8 @@
     "@upstash/redis": "^1.34.3",
     "lucide-react": "^0.563.0",
     "next": "^15.3.3",
+    "posthog-js": "^1.354.3",
+    "posthog-node": "^5.26.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-qr-code": "^2.0.18",

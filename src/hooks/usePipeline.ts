@@ -11,6 +11,7 @@ import type {
   PrivateKeyAccount,
   SignAuthorizationReturnType,
 } from "viem/accounts";
+import posthog from "posthog-js";
 import {
   createSessionSigner,
   createSmartSessionModule,
@@ -125,6 +126,19 @@ export function usePipeline() {
   //  (used to reuse the same signer if the user refreshes mid-setup).
   // ═══════════════════════════════════════════════════════════════════
 
+  // ─── Identify user and track wallet_connected when wallet is available ────
+  const prevWalletRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!embeddedWallet) return;
+    const addr = embeddedWallet.address;
+    if (prevWalletRef.current === addr) return;
+    prevWalletRef.current = addr;
+
+    // Identify the wallet address as the PostHog distinct ID
+    posthog.identify(addr, { wallet_address: addr });
+    posthog.capture("wallet_connected", { wallet_address: addr });
+  }, [embeddedWallet]);
+
   useEffect(() => {
     if (!embeddedWallet) return;
     const addr = embeddedWallet.address;
@@ -217,6 +231,9 @@ export function usePipeline() {
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    posthog.capture("deposit_address_copied", {
+      wallet_address: embeddedWallet.address,
+    });
   };
 
   // ═══════════════════════════════════════════════════════════════════
@@ -271,10 +288,15 @@ export function usePipeline() {
       setAuthStatus("success");
     } catch (err) {
       console.error("Failed to sign authorization:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to sign authorization",
-      );
+      const msg = err instanceof Error ? err.message : "Failed to sign authorization";
+      setError(msg);
       setAuthStatus("error");
+      posthog.capture("session_setup_failed", {
+        step: "sign_authorization",
+        error: msg,
+        wallet_address: embeddedWallet?.address,
+      });
+      posthog.captureException(err);
     }
   };
 
@@ -294,10 +316,15 @@ export function usePipeline() {
       setSetupStatus("success");
     } catch (err) {
       console.error("Failed to setup Nexus account:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to setup Nexus account",
-      );
+      const msg = err instanceof Error ? err.message : "Failed to setup Nexus account";
+      setError(msg);
       setSetupStatus("error");
+      posthog.capture("session_setup_failed", {
+        step: "initialize_nexus",
+        error: msg,
+        wallet_address: embeddedWallet?.address,
+      });
+      posthog.captureException(err);
     }
   };
 
@@ -332,12 +359,15 @@ export function usePipeline() {
       setInstallStatus("success");
     } catch (err) {
       console.error("Failed to install sessions module:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to install sessions module",
-      );
+      const msg = err instanceof Error ? err.message : "Failed to install sessions module";
+      setError(msg);
       setInstallStatus("error");
+      posthog.capture("session_setup_failed", {
+        step: "install_sessions_module",
+        error: msg,
+        wallet_address: embeddedWallet?.address,
+      });
+      posthog.captureException(err);
     }
   };
 
@@ -356,10 +386,15 @@ export function usePipeline() {
       setGrantStatus("success");
     } catch (err) {
       console.error("Failed to grant permission:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to grant permission",
-      );
+      const msg = err instanceof Error ? err.message : "Failed to grant permission";
+      setError(msg);
       setGrantStatus("error");
+      posthog.capture("session_setup_failed", {
+        step: "grant_permission",
+        error: msg,
+        wallet_address: embeddedWallet?.address,
+      });
+      posthog.captureException(err);
     }
   };
 
@@ -400,6 +435,10 @@ export function usePipeline() {
 
     // 6. Clear any lingering error
     setError(null);
+
+    posthog.capture("session_reconfigured", {
+      wallet_address: embeddedWallet?.address,
+    });
 
     setReconfigureStatus("done");
     setTimeout(() => setReconfigureStatus("idle"), 2000);
@@ -463,6 +502,10 @@ export function usePipeline() {
 
     // 7. Clear any lingering error
     setError(null);
+
+    posthog.capture("session_deleted", {
+      wallet_address: embeddedWallet.address,
+    });
 
     setDeleteStatus("done");
 
@@ -573,6 +616,12 @@ export function usePipeline() {
               if (!cancelled) {
                 setServerRegistered(true);
                 console.log("[server] Session registered for background monitoring");
+                posthog.capture("session_setup_completed", {
+                  wallet_address: embeddedWallet.address,
+                  dest_chain_id: destChainId,
+                  recipient_is_self: recipientIsSelf,
+                  recipient_token_symbol: recipientTokenSymbol ?? "same_as_input",
+                });
               }
             } catch (err) {
               console.error("[server] Failed to register session:", err);
